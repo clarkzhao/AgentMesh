@@ -40,7 +40,7 @@ uv run pyright packages/discovery-py/agentmesh_discovery
 
 ## Conventions
 
-- **Commits**: Conventional Commits — `<type>(<scope>): <description>`. See `CONTRIBUTING.md` for types and scopes.
+- **Commits**: Conventional Commits — `<type>(<scope>): <description>`. Types: `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `chore`, `ci`. Scopes: `discovery-py`, `openclaw-plugin`, `examples`, `docs`, `root`. Omit scope for cross-package changes. See `CONTRIBUTING.md` for details.
 - **TS style**: ESM (`"type": "module"`), `.js` extensions in imports, no build step (OpenClaw uses jiti)
 - **Python style**: Python 3.12+, ruff for lint/format, pyright strict, pytest-asyncio strict mode
 - **License**: Apache 2.0
