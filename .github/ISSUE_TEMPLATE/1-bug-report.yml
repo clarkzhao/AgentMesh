@@ -1,0 +1,61 @@
+name: Bug Report
+description: Report an issue that should be fixed
+labels:
+  - bug
+  - needs triage
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for submitting a bug report! It helps make AgentMesh better for everyone.
+
+        Make sure you are running the latest version. The bug you are experiencing may already have been fixed.
+
+        Please try to include as much information as possible.
+
+  - type: dropdown
+    id: package
+    attributes:
+      label: Which package is affected?
+      options:
+        - openclaw-plugin
+        - discovery-py
+        - examples
+        - other
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: What version are you running?
+      description: Copy the relevant version from `package.json` or `pyproject.toml`
+    validations:
+      required: true
+  - type: input
+    id: platform
+    attributes:
+      label: What platform is your computer?
+      description: "For macOS/Linux: copy the output of `uname -mprs`"
+  - type: textarea
+    id: actual
+    attributes:
+      label: What issue are you seeing?
+      description: Please include full error messages with any private information redacted. Prefer text over screenshots.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: What steps can reproduce the bug?
+      description: Provide a minimal reproduction. Include relevant config (e.g. session strategy, auth mode).
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What is the expected behavior?
+  - type: textarea
+    id: notes
+    attributes:
+      label: Additional information
+      description: Is there anything else you think we should know?
