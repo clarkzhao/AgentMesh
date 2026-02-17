@@ -2,7 +2,91 @@
 
 Agent discovery mesh for A2A agents. Enables agents across frameworks (OpenClaw, NanoClaw, etc.) to discover each other via mDNS and communicate using the [A2A protocol](https://google.github.io/A2A/).
 
+## Features (M1)
+
+- **LAN agent discovery** via mDNS (`_a2a._tcp`) — agents on the same network find each other automatically
+- **Static discovery** via `bootstrap.json` for known agent endpoints
+- **A2A protocol bridge for OpenClaw** — serves AgentCard, handles `tasks/send` and `tasks/get`
+- **Bearer token authentication** for the A2A endpoint (auto-generated or explicit)
+- **Session strategies**: `per-task`, `per-conversation`, `shared`
+- **Python discovery SDK** (`agentmesh-discovery`) with mDNS, static, and merged discovery
+
+**Not yet supported:**
+- WAN / internet discovery (LAN only — no registry server yet)
+- Streaming (`tasks/sendSubscribe`)
+- Non-text message parts (images, files)
+- Task cancellation (`tasks/cancel`)
+- Multi-agent routing
+
 ## Architecture
+
+### Component Overview
+
+```plantuml
+@startuml
+skinparam componentStyle rectangle
+
+package "LAN" {
+  [OpenClaw Gateway] as OC
+  [agentmesh-a2a Plugin] as Plugin
+  [Python Client] as PyClient
+
+  OC --> Plugin : loads
+  Plugin --> OC : dispatchReplyFromConfig()
+}
+
+cloud "mDNS (_a2a._tcp)" as MDNS
+
+Plugin ..> MDNS : announce
+PyClient ..> MDNS : discover
+
+node "A2A Protocol (HTTP)" {
+  [GET /.well-known/agent.json] as CardEP
+  [POST /a2a] as A2aEP
+}
+
+Plugin --> CardEP : serves
+Plugin --> A2aEP : serves
+PyClient --> CardEP : fetch AgentCard
+PyClient --> A2aEP : tasks/send (Bearer token)
+
+note right of MDNS
+  LAN only (M1)
+  WAN registry planned (M3)
+end note
+@enduml
+```
+
+### Discovery + Task Flow
+
+```plantuml
+@startuml
+participant "Python Client\n(discovery-py)" as Client
+participant "mDNS\n(_a2a._tcp)" as MDNS
+participant "agentmesh-a2a\nPlugin" as Plugin
+participant "OpenClaw\nGateway" as OC
+
+== Discovery ==
+
+Plugin -> MDNS : announce(_a2a._tcp)\nTXT: url, name, v=1
+Client -> MDNS : browse(_a2a._tcp)
+MDNS --> Client : found: OpenClaw\n@ 127.0.0.1:18789
+
+Client -> Plugin : GET /.well-known/agent.json
+Plugin --> Client : AgentCard\n{name, url, skills, securitySchemes}
+
+== A2A Task ==
+
+Client -> Plugin : POST /a2a\nAuthorization: Bearer <token>\n{"method":"tasks/send",\n "params":{"id":"t1","message":{...}}}
+Plugin -> Plugin : validate token
+Plugin -> Plugin : resolve session key\n(per-task | per-conversation | shared)
+Plugin -> OC : dispatchReplyFromConfig()\ncreate session, run agent
+OC --> Plugin : agent reply (text)
+Plugin --> Client : {"result":{"id":"t1",\n "status":{"state":"completed"},\n "artifacts":[{"parts":[{"text":"..."}]}]}}
+@enduml
+```
+
+### Repository Structure
 
 ```
 agentmesh/
@@ -233,6 +317,23 @@ uv run pyright packages/discovery-py/agentmesh_discovery
 - **No cancellation**: `tasks/cancel` returns `-32601` (honest unsupported).
 - **Session viewer**: OpenClaw's UI does not render conversation details for the `a2a` provider. Sessions appear in the list with correct token usage but the message transcript is not displayed.
 - **Single agent**: All A2A tasks route to one agent identity (`session.agentId`). Multi-agent routing is planned for M2.
+
+## Roadmap
+
+### M2 — Streaming + Multi-agent
+
+- `tasks/sendSubscribe` (SSE streaming responses)
+- Multi-agent routing (route A2A tasks to different agent identities)
+- Non-text message parts (images, files)
+- Task cancellation (`tasks/cancel`)
+- Adopt official [`a2a-sdk`](https://pypi.org/project/a2a-sdk/) for Python types + client (see [`docs/a2a-sdk_adoption.md`](docs/a2a-sdk_adoption.md))
+
+### M3 — WAN Discovery + More Frameworks
+
+- Registry server for WAN/internet discovery (beyond LAN mDNS)
+- Ed25519 agent identity and mutual authentication
+- TypeScript discovery SDK (`discovery-ts`)
+- A2A bridge plugins for other frameworks (NanoClaw, etc.)
 
 ## Demo Flow
 
