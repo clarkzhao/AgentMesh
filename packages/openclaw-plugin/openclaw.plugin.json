@@ -1,0 +1,93 @@
+{
+  "id": "agentmesh-a2a",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "publicBaseUrl": {
+        "type": "string",
+        "description": "Public base URL for this agent (e.g. http://192.168.1.42:18789). No trailing slash."
+      },
+      "agentName": {
+        "type": "string",
+        "default": "OpenClaw",
+        "description": "Agent name in the A2A AgentCard"
+      },
+      "agentDescription": {
+        "type": "string",
+        "default": "An OpenClaw agent exposed via A2A",
+        "description": "Agent description in the A2A AgentCard"
+      },
+      "mdns": {
+        "type": "boolean",
+        "default": true,
+        "description": "Announce agent via mDNS (_a2a._tcp)"
+      },
+      "auth": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "token": {
+            "type": "string",
+            "description": "Bearer token for A2A endpoint. If omitted, auto-generated and persisted."
+          },
+          "allowUnauthenticated": {
+            "type": "boolean",
+            "default": false,
+            "description": "Disable auth entirely (not recommended)"
+          }
+        }
+      },
+      "session": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "strategy": {
+            "type": "string",
+            "enum": ["per-task", "per-conversation", "shared"],
+            "default": "per-task",
+            "description": "Session isolation strategy"
+          },
+          "prefix": {
+            "type": "string",
+            "default": "a2a",
+            "description": "Session key prefix"
+          },
+          "agentId": {
+            "type": "string",
+            "default": "main",
+            "description": "Which OpenClaw agent identity to use"
+          },
+          "timeoutMs": {
+            "type": "number",
+            "default": 120000,
+            "description": "Max wait for per-task strategy. Ignored for per-conversation/shared (hardcoded 300s ceiling)."
+          }
+        }
+      },
+      "skills": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "id": { "type": "string" },
+            "name": { "type": "string" },
+            "description": { "type": "string" }
+          },
+          "required": ["id", "name", "description"]
+        },
+        "description": "Skills listed in the A2A AgentCard"
+      }
+    }
+  },
+  "uiHints": {
+    "publicBaseUrl": {
+      "label": "Public Base URL",
+      "placeholder": "http://192.168.1.42:18789"
+    },
+    "auth.token": {
+      "label": "Auth Token",
+      "sensitive": true
+    }
+  }
+}

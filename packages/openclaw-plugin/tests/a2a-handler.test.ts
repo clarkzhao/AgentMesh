@@ -1,0 +1,373 @@
+import { describe, it, expect, vi } from "vitest";
+import { createA2aHandler } from "../src/a2a-handler.js";
+import {
+  createMockApiWithReply,
+  createMockRequest,
+  createMockResponse,
+  validA2aRequest,
+  defaultPluginConfig,
+} from "./helpers.js";
+import type { PluginConfig } from "../src/types.js";
+
+function setup(configOverrides: Partial<PluginConfig> = {}, replyText = "Hello back!") {
+  const config = defaultPluginConfig(configOverrides);
+  const api = createMockApiWithReply(replyText);
+  const handler = createA2aHandler({ api, config });
+  return { handler, config };
+}
+
+describe("a2a-handler", () => {
+  describe("JSON-RPC parsing", () => {
+    it("handles valid tasks/send request", async () => {
+      const { handler } = setup({ auth: { token: null, allowUnauthenticated: true } });
+      const req = createMockRequest("POST", validA2aRequest());
+      const res = createMockResponse();
+
+      await handler(req, res);
+
+      expect(res._status).toBe(200);
+      const body = JSON.parse(res._body);
+      expect(body.jsonrpc).toBe("2.0");
+      expect(body.id).toBe("req-1");
+      expect(body.result.id).toBe("task-1");
+      expect(body.result.status.state).toBe("completed");
+      expect(body.result.artifacts).toHaveLength(1);
+      expect(body.result.artifacts[0].parts[0].text).toBe("Hello back!");
+    });
+
+    it("rejects malformed JSON", async () => {
+      const { handler } = setup({ auth: { token: null, allowUnauthenticated: true } });
+      const req = createMockRequest("POST", "not json{{{");
+      const res = createMockResponse();
+
+      await handler(req, res);
+
+      expect(res._status).toBe(400);
+      const body = JSON.parse(res._body);
+      expect(body.error.code).toBe(-32700);
+    });
+
+    it("rejects missing jsonrpc field", async () => {
+      const { handler } = setup({ auth: { token: null, allowUnauthenticated: true } });
+      const req = createMockRequest("POST", { id: "1", method: "tasks/send" });
+      const res = createMockResponse();
+
+      await handler(req, res);
+
+      expect(res._status).toBe(400);
+      const body = JSON.parse(res._body);
+      expect(body.error.code).toBe(-32600);
+    });
+
+    it("rejects missing params.id", async () => {
+      const { handler } = setup({ auth: { token: null, allowUnauthenticated: true } });
+      const req = createMockRequest("POST", {
+        jsonrpc: "2.0",
+        id: "1",
+        method: "tasks/send",
+        params: { message: { role: "user", parts: [{ type: "text", text: "Hi" }] } },
+      });
+      const res = createMockResponse();
+
+      await handler(req, res);
+
+      expect(res._status).toBe(200);
+      const body = JSON.parse(res._body);
+      expect(body.error.code).toBe(-32602);
+    });
+
+    it("returns -32601 for unknown method", async () => {
+      const { handler } = setup({ auth: { token: null, allowUnauthenticated: true } });
+      const req = createMockRequest("POST", {
+        jsonrpc: "2.0",
+        id: "1",
+        method: "tasks/unknown",
+      });
+      const res = createMockResponse();
+
+      await handler(req, res);
+
+      const body = JSON.parse(res._body);
+      expect(body.error.code).toBe(-32601);
+      expect(body.error.message).toBe("Method not found");
+    });
+
+    it("returns -32601 for tasks/cancel", async () => {
+      const { handler } = setup({ auth: { token: null, allowUnauthenticated: true } });
+      const req = createMockRequest("POST", {
+        jsonrpc: "2.0",
+        id: "1",
+        method: "tasks/cancel",
+      });
+      const res = createMockResponse();
+
+      await handler(req, res);
+
+      const body = JSON.parse(res._body);
+      expect(body.error.code).toBe(-32601);
+      expect(body.error.message).toContain("not supported");
+    });
+
+    it("rejects non-POST requests", async () => {
+      const { handler } = setup({ auth: { token: null, allowUnauthenticated: true } });
+      const req = createMockRequest("GET", "");
+      req.method = "GET";
+      const res = createMockResponse();
+
+      await handler(req, res);
+
+      expect(res._status).toBe(405);
+    });
+
+    it("warns about non-text parts and skips them", async () => {
+      const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const { handler } = setup({ auth: { token: null, allowUnauthenticated: true } });
+      const req = createMockRequest("POST", {
+        jsonrpc: "2.0",
+        id: "1",
+        method: "tasks/send",
+        params: {
+          id: "task-1",
+          message: {
+            role: "user",
+            parts: [
+              { type: "text", text: "Hello" },
+              { type: "image", data: "base64..." },
+            ],
+          },
+        },
+      });
+      const res = createMockResponse();
+
+      await handler(req, res);
+
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining("Skipping non-text part type: image"),
+      );
+      expect(res._status).toBe(200);
+      const body = JSON.parse(res._body);
+      expect(body.result.status.state).toBe("completed");
+      warnSpy.mockRestore();
+    });
+
+    it("rejects message with no text parts", async () => {
+      const { handler } = setup({ auth: { token: null, allowUnauthenticated: true } });
+      const req = createMockRequest("POST", {
+        jsonrpc: "2.0",
+        id: "1",
+        method: "tasks/send",
+        params: {
+          id: "task-1",
+          message: {
+            role: "user",
+            parts: [{ type: "image", data: "base64..." }],
+          },
+        },
+      });
+      const res = createMockResponse();
+
+      await handler(req, res);
+
+      const body = JSON.parse(res._body);
+      expect(body.error.code).toBe(-32602);
+      expect(body.error.message).toContain("no text parts");
+    });
+  });
+
+  describe("auth", () => {
+    it("passes with valid token", async () => {
+      const { handler } = setup({ auth: { token: "secret", allowUnauthenticated: false } });
+      const req = createMockRequest("POST", validA2aRequest(), {
+        authorization: "Bearer secret",
+      });
+      const res = createMockResponse();
+
+      await handler(req, res);
+
+      expect(res._status).toBe(200);
+      const body = JSON.parse(res._body);
+      expect(body.result).toBeDefined();
+    });
+
+    it("rejects missing token with 401", async () => {
+      const { handler } = setup({ auth: { token: "secret", allowUnauthenticated: false } });
+      const req = createMockRequest("POST", validA2aRequest());
+      const res = createMockResponse();
+
+      await handler(req, res);
+
+      expect(res._status).toBe(401);
+    });
+
+    it("rejects wrong token with 401", async () => {
+      const { handler } = setup({ auth: { token: "secret", allowUnauthenticated: false } });
+      const req = createMockRequest("POST", validA2aRequest(), {
+        authorization: "Bearer wrong-token",
+      });
+      const res = createMockResponse();
+
+      await handler(req, res);
+
+      expect(res._status).toBe(401);
+    });
+
+    it("bypasses auth when allowUnauthenticated is true", async () => {
+      const { handler } = setup({ auth: { token: null, allowUnauthenticated: true } });
+      const req = createMockRequest("POST", validA2aRequest());
+      const res = createMockResponse();
+
+      await handler(req, res);
+
+      expect(res._status).toBe(200);
+    });
+  });
+
+  describe("session key generation", () => {
+    it("generates per-task session key", async () => {
+      let capturedCtx: { SessionKey: string } | null = null;
+      const api = createMockApiWithReply("ok");
+      api.runtime.channel.reply.finalizeInboundContext = (ctx) => {
+        capturedCtx = ctx as { SessionKey: string };
+        return ctx;
+      };
+      const config = defaultPluginConfig({
+        auth: { token: null, allowUnauthenticated: true },
+        session: { strategy: "per-task", prefix: "a2a", agentId: "main", timeoutMs: 5000 },
+      });
+      const handler = createA2aHandler({ api, config });
+
+      const req = createMockRequest("POST", validA2aRequest());
+      const res = createMockResponse();
+      await handler(req, res);
+
+      expect(capturedCtx?.SessionKey).toBe("a2a:main:task-1");
+    });
+
+    it("generates per-conversation session key with sessionId", async () => {
+      let capturedCtx: { SessionKey: string } | null = null;
+      const api = createMockApiWithReply("ok");
+      api.runtime.channel.reply.finalizeInboundContext = (ctx) => {
+        capturedCtx = ctx as { SessionKey: string };
+        return ctx;
+      };
+      const config = defaultPluginConfig({
+        auth: { token: null, allowUnauthenticated: true },
+        session: {
+          strategy: "per-conversation",
+          prefix: "a2a",
+          agentId: "main",
+          timeoutMs: 5000,
+        },
+      });
+      const handler = createA2aHandler({ api, config });
+
+      const req = createMockRequest("POST", {
+        ...validA2aRequest(),
+        params: {
+          ...validA2aRequest().params,
+          sessionId: "conv-42",
+        },
+      });
+      const res = createMockResponse();
+      await handler(req, res);
+
+      expect(capturedCtx?.SessionKey).toBe("a2a:main:conv-42");
+    });
+
+    it("generates per-conversation key falling back to taskId when no sessionId", async () => {
+      let capturedCtx: { SessionKey: string } | null = null;
+      const api = createMockApiWithReply("ok");
+      api.runtime.channel.reply.finalizeInboundContext = (ctx) => {
+        capturedCtx = ctx as { SessionKey: string };
+        return ctx;
+      };
+      const config = defaultPluginConfig({
+        auth: { token: null, allowUnauthenticated: true },
+        session: {
+          strategy: "per-conversation",
+          prefix: "a2a",
+          agentId: "main",
+          timeoutMs: 5000,
+        },
+      });
+      const handler = createA2aHandler({ api, config });
+
+      const req = createMockRequest("POST", validA2aRequest());
+      const res = createMockResponse();
+      await handler(req, res);
+
+      expect(capturedCtx?.SessionKey).toBe("a2a:main:task-1");
+    });
+
+    it("generates shared session key", async () => {
+      let capturedCtx: { SessionKey: string } | null = null;
+      const api = createMockApiWithReply("ok");
+      api.runtime.channel.reply.finalizeInboundContext = (ctx) => {
+        capturedCtx = ctx as { SessionKey: string };
+        return ctx;
+      };
+      const config = defaultPluginConfig({
+        auth: { token: null, allowUnauthenticated: true },
+        session: { strategy: "shared", prefix: "a2a", agentId: "main", timeoutMs: 5000 },
+      });
+      const handler = createA2aHandler({ api, config });
+
+      const req = createMockRequest("POST", validA2aRequest());
+      const res = createMockResponse();
+      await handler(req, res);
+
+      expect(capturedCtx?.SessionKey).toBe("a2a:main:shared");
+    });
+  });
+
+  describe("A2A error response format", () => {
+    it("returns proper JSON-RPC error structure", async () => {
+      const { handler } = setup({ auth: { token: null, allowUnauthenticated: true } });
+      const req = createMockRequest("POST", {
+        jsonrpc: "2.0",
+        id: "1",
+        method: "tasks/unknown",
+      });
+      const res = createMockResponse();
+
+      await handler(req, res);
+
+      const body = JSON.parse(res._body);
+      expect(body.jsonrpc).toBe("2.0");
+      expect(body.id).toBe("1");
+      expect(body.error).toBeDefined();
+      expect(typeof body.error.code).toBe("number");
+      expect(typeof body.error.message).toBe("string");
+    });
+  });
+
+  describe("A2A response structure", () => {
+    it("includes history with user and agent messages", async () => {
+      const { handler } = setup({ auth: { token: null, allowUnauthenticated: true } });
+      const req = createMockRequest("POST", validA2aRequest());
+      const res = createMockResponse();
+
+      await handler(req, res);
+
+      const body = JSON.parse(res._body);
+      const result = body.result;
+      expect(result.history).toHaveLength(2);
+      expect(result.history[0].role).toBe("user");
+      expect(result.history[1].role).toBe("agent");
+      expect(result.history[1].parts[0].type).toBe("text");
+    });
+
+    it("includes artifacts with text parts", async () => {
+      const { handler } = setup({ auth: { token: null, allowUnauthenticated: true } });
+      const req = createMockRequest("POST", validA2aRequest());
+      const res = createMockResponse();
+
+      await handler(req, res);
+
+      const body = JSON.parse(res._body);
+      expect(body.result.artifacts).toHaveLength(1);
+      expect(body.result.artifacts[0].name).toBe("response");
+      expect(body.result.artifacts[0].parts[0].type).toBe("text");
+    });
+  });
+});

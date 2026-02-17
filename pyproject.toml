@@ -1,0 +1,14 @@
+[project]
+name = "agentmesh"
+version = "0.1.0"
+description = "Agent discovery mesh for A2A agents"
+requires-python = ">=3.12"
+dependencies = [
+    "agentmesh-discovery",
+]
+
+[tool.uv.workspace]
+members = ["packages/discovery-py"]
+
+[tool.uv.sources]
+agentmesh-discovery = { workspace = true }

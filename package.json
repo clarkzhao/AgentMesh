@@ -1,0 +1,6 @@
+{
+  "name": "agentmesh",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Agent discovery mesh for A2A agents"
+}
