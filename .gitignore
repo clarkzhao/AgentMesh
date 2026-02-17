@@ -1,14 +1,32 @@
+# Node / TypeScript
 node_modules/
 dist/
+*.tsbuildinfo
+coverage/
+.vite/
+
+# Python
 .venv/
 __pycache__/
-*.pyc
-*.pyo
+*.py[oc]
+*.egg-info/
+build/
+wheels/
 .pytest_cache/
 .ruff_cache/
 .mypy_cache/
-*.egg-info/
+
+# Environment
 .env
+.env.local
+uv.toml
+
+# IDE
+.vscode/
+.idea/
+
+# macOS
 .DS_Store
-coverage/
-*.tsbuildinfo
+
+# Temp
+/tmp/
