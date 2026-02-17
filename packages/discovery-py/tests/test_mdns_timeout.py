@@ -7,7 +7,7 @@ from agentmesh_discovery.mdns import MdnsDiscovery
 @pytest.mark.asyncio
 async def test_discover_one_returns_within_timeout() -> None:
     discovery = MdnsDiscovery()
-    # Very short timeout — returns None if no agent found, or a DiscoveredAgent if one is broadcasting
+    # Short timeout — returns None or a DiscoveredAgent if one is broadcasting
     result = await discovery.discover_one(timeout=0.1)
     assert result is None or result.agent_card_url != ""
 

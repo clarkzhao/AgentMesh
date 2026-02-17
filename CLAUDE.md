@@ -15,27 +15,22 @@ docs/                        # Roadmap docs
 
 ## Commands
 
-### TypeScript (openclaw-plugin)
-
 ```bash
-# Run tests (56 tests)
-pnpm --filter @agentmesh/agentmesh-a2a test
-
-# Type check
-pnpm --filter @agentmesh/agentmesh-a2a typecheck
+make prepare                 # Install all dependencies (pnpm + uv)
+make test                    # Run all tests (TS + Python)
+make check                   # Lint + typecheck all
+make format                  # Format Python code
+make install-plugin          # Install plugin into OpenClaw
+make sync-plugin             # Sync plugin src after code changes
 ```
 
-### Python (discovery-py)
+Per-package targets:
 
 ```bash
-# Run tests (15 tests)
-uv run pytest packages/discovery-py/tests
-
-# Lint
-uv run ruff check packages/discovery-py
-
-# Type check
-uv run pyright packages/discovery-py/agentmesh_discovery
+make test-openclaw-plugin    # TS plugin tests (56 tests)
+make test-discovery-py       # Python SDK tests (15 tests)
+make check-openclaw-plugin   # Typecheck TS plugin
+make check-discovery-py      # Lint + typecheck Python SDK
 ```
 
 ## Conventions
@@ -55,17 +50,13 @@ uv run pyright packages/discovery-py/agentmesh_discovery
 ## Installing the Plugin in OpenClaw
 
 ```bash
-rsync -av --exclude node_modules --exclude .vite --exclude package-lock.json \
-  packages/openclaw-plugin/ /tmp/agentmesh-a2a/
-openclaw plugins install /tmp/agentmesh-a2a
-rm -rf /tmp/agentmesh-a2a
+make install-plugin    # First-time install (requires openclaw CLI)
+make sync-plugin       # After code changes (rsync --delete, removes stale files)
 ```
-
-After code changes, sync with: `cp -R packages/openclaw-plugin/src ~/.openclaw/extensions/agentmesh-a2a/src`
 
 ## Testing After Changes
 
 Always run the relevant test suite after modifying code:
-- Changed `packages/openclaw-plugin/src/*.ts` → run TS tests
-- Changed `packages/discovery-py/**/*.py` → run Python tests
-- Changed both → run both
+- Changed `packages/openclaw-plugin/src/*.ts` → `make test-openclaw-plugin`
+- Changed `packages/discovery-py/**/*.py` → `make test-discovery-py`
+- Changed both → `make test`

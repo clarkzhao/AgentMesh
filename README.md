@@ -99,6 +99,7 @@ agentmesh/
 ├── examples/
 │   ├── py-agent/               # Discover → A2A task → print result
 │   └── demo.sh
+├── Makefile                    # Cross-language build commands
 ├── package.json                # Monorepo root (pnpm for TS)
 ├── pnpm-workspace.yaml
 ├── pyproject.toml              # Monorepo root (uv for Python)
@@ -117,25 +118,13 @@ agentmesh/
 
 ```bash
 cd agentmesh
-pnpm install          # TS packages
-uv sync               # Python packages
+make prepare          # Install all dependencies (pnpm + uv)
 ```
 
 ### Install the OpenClaw Plugin
 
-**Important**: The source directory must not contain pnpm `node_modules/` symlinks. Create a clean
-copy before installing:
-
 ```bash
-# Create a clean copy without node_modules or lockfiles
-rsync -av --exclude node_modules --exclude .vite --exclude package-lock.json \
-  packages/openclaw-plugin/ /tmp/agentmesh-a2a/
-
-# Install via CLI (copies files + runs npm install)
-openclaw plugins install /tmp/agentmesh-a2a
-
-# Clean up temp
-rm -rf /tmp/agentmesh-a2a
+make install-plugin
 ```
 
 The CLI registers the plugin with an empty config. Add your config to
@@ -175,8 +164,7 @@ openclaw plugins list
 To update the plugin after code changes:
 
 ```bash
-# Re-copy source and restart gateway
-cp -R packages/openclaw-plugin/src ~/.openclaw/extensions/agentmesh-a2a/src
+make sync-plugin
 # Then restart: openclaw gateway
 ```
 
@@ -299,15 +287,20 @@ Each A2A task generates a unique session in OpenClaw. Sessions are visible in Op
 All commands run from the **repo root** (`agentmesh/`):
 
 ```bash
-# TypeScript plugin tests (56 tests)
-pnpm --filter @agentmesh/agentmesh-a2a test
+make prepare       # Install all dependencies (pnpm + uv)
+make test          # Run all tests (TS + Python)
+make check         # Lint + typecheck all
+make format        # Format Python code
+make help          # Show all available targets
+```
 
-# Python SDK tests (15 tests)
-uv run pytest packages/discovery-py/tests
+Per-package targets are also available:
 
-# Lint & type check (Python)
-uv run ruff check packages/discovery-py
-uv run pyright packages/discovery-py/agentmesh_discovery
+```bash
+make test-openclaw-plugin    # TS plugin tests (56 tests)
+make test-discovery-py       # Python SDK tests (15 tests)
+make check-openclaw-plugin   # Typecheck TS plugin
+make check-discovery-py      # Lint + typecheck Python SDK
 ```
 
 ## Known Limitations (M1)

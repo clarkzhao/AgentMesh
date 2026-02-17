@@ -5,7 +5,13 @@ import { createAgentCardHandler } from "./agent-card.js";
 import { createA2aHandler } from "./a2a-handler.js";
 import { MdnsAnnouncer } from "./mdns-announcer.js";
 
-const plugin = {
+const plugin: {
+  id: string;
+  name: string;
+  description: string;
+  configSchema: ReturnType<typeof emptyPluginConfigSchema>;
+  register: (api: OpenClawPluginApi) => void;
+} = {
   id: "agentmesh-a2a",
   name: "AgentMesh A2A Bridge",
   description: "Exposes any OpenClaw agent as a standard A2A agent via the A2A protocol",
