@@ -27,7 +27,7 @@ export function buildAgentCard(config: PluginConfig): Record<string, unknown> {
     version: "0.2.0",
     protocol_version: "0.3.0",
     capabilities: {
-      streaming: false,
+      streaming: true,
       pushNotifications: false,
       stateTransitionHistory: true,
     },

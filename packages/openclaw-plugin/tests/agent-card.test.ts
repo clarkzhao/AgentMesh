@@ -70,6 +70,12 @@ describe("agent-card", () => {
     expect(card.security).toBeUndefined();
   });
 
+  it("advertises streaming capability", () => {
+    const config = defaultPluginConfig();
+    const card = buildAgentCard(config);
+    expect((card.capabilities as Record<string, unknown>).streaming).toBe(true);
+  });
+
   it("includes tags on skills", () => {
     const config = defaultPluginConfig();
     const card = buildAgentCard(config);

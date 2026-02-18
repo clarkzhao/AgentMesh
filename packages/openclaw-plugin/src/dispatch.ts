@@ -10,13 +10,22 @@ export interface DispatchParams {
   sessionKey: string;
   taskId: string;
   agentId?: string;
+  signal?: AbortSignal;
 }
 
-export async function dispatchToAgent(params: DispatchParams): Promise<string> {
-  const { api, config, message, sessionKey, taskId, agentId } = params;
-  const effectiveAgentId = agentId ?? config.session.agentId;
+export interface StreamChunk {
+  text: string;
+  isFinal: boolean;
+}
 
-  // Validate runtime API exists
+export class AbortError extends Error {
+  constructor(message = "Dispatch aborted") {
+    super(message);
+    this.name = "AbortError";
+  }
+}
+
+function validateReplyApi(api: OpenClawPluginApi) {
   const reply = api.runtime?.channel?.reply;
   if (!reply) {
     throw new Error("OpenClaw runtime API not available (api.runtime.channel.reply is missing)");
@@ -30,9 +39,13 @@ export async function dispatchToAgent(params: DispatchParams): Promise<string> {
   if (typeof reply.dispatchReplyFromConfig !== "function") {
     throw new Error("OpenClaw API missing: dispatchReplyFromConfig");
   }
+  return reply;
+}
 
-  // 1. Build MsgContext with all required fields
-  const rawCtx = {
+function buildRawCtx(params: DispatchParams) {
+  const { config, message, sessionKey, taskId } = params;
+  const effectiveAgentId = params.agentId ?? config.session.agentId;
+  return {
     Body: message,
     CommandBody: message,
     From: "a2a:remote",
@@ -46,22 +59,31 @@ export async function dispatchToAgent(params: DispatchParams): Promise<string> {
     Timestamp: Date.now(),
     WasMentioned: true,
     OriginatingChannel: "a2a" as const,
-    OriginatingTo: `agent:${config.session.agentId}`,
+    OriginatingTo: `agent:${effectiveAgentId}`,
   };
+}
 
-  // 2. Finalize inbound context
+function getEffectiveTimeout(config: PluginConfig): number {
+  const isSharedSession =
+    config.session.strategy === "per-conversation" || config.session.strategy === "shared";
+  return isSharedSession ? GATEWAY_CEILING_MS : config.session.timeoutMs;
+}
+
+export async function dispatchToAgent(params: DispatchParams): Promise<string> {
+  const { api, config, signal } = params;
+  const reply = validateReplyApi(api);
+
+  const rawCtx = buildRawCtx(params);
   const ctx = reply.finalizeInboundContext(rawCtx);
 
-  // 3. Create reply dispatcher with deliver callback
   const replyParts: string[] = [];
   let timedOut = false;
 
-  // deliver signature: (payload: ReplyPayload, info: { kind }) => Promise<void>
   const deliver = async (
     payload: { text?: string },
     info: { kind: string },
   ) => {
-    if (timedOut) return; // Discard late writes for per-task
+    if (timedOut) return;
     if (info.kind === "final" && payload.text) {
       replyParts.push(payload.text);
     }
@@ -70,16 +92,10 @@ export async function dispatchToAgent(params: DispatchParams): Promise<string> {
   const { dispatcher, replyOptions, markDispatchIdle } =
     reply.createReplyDispatcherWithTyping({ deliver });
 
-  // 4. Load config
   const cfg = api.runtime.config.loadConfig();
+  const effectiveTimeout = getEffectiveTimeout(config);
 
-  // 5. Determine timeout
-  const isSharedSession =
-    config.session.strategy === "per-conversation" || config.session.strategy === "shared";
-  const effectiveTimeout = isSharedSession ? GATEWAY_CEILING_MS : config.session.timeoutMs;
-
-  // 6. Execute with timeout
-  const result = await Promise.race([
+  const promises: Promise<string>[] = [
     (async () => {
       await reply.dispatchReplyFromConfig({ ctx, cfg, dispatcher, replyOptions });
       dispatcher.markComplete();
@@ -88,11 +104,120 @@ export async function dispatchToAgent(params: DispatchParams): Promise<string> {
       return replyParts.join("\n\n");
     })(),
     new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new TimeoutError()), effectiveTimeout),
+      setTimeout(() => {
+        timedOut = true;
+        reject(new TimeoutError());
+      }, effectiveTimeout),
     ),
-  ]);
+  ];
 
-  return result;
+  if (signal) {
+    promises.push(
+      new Promise<never>((_, reject) => {
+        if (signal.aborted) {
+          reject(new AbortError());
+          return;
+        }
+        signal.addEventListener("abort", () => reject(new AbortError()), { once: true });
+      }),
+    );
+  }
+
+  return Promise.race(promises);
+}
+
+export async function* dispatchToAgentStreaming(params: DispatchParams): AsyncGenerator<StreamChunk> {
+  const { api, config, signal } = params;
+  const reply = validateReplyApi(api);
+
+  const rawCtx = buildRawCtx(params);
+  const ctx = reply.finalizeInboundContext(rawCtx);
+
+  // AsyncQueue for delivering chunks from the callback to the generator
+  const queue: Array<StreamChunk | Error> = [];
+  let resolve: (() => void) | null = null;
+  let done = false;
+
+  function enqueue(item: StreamChunk | Error) {
+    queue.push(item);
+    if (resolve) {
+      resolve();
+      resolve = null;
+    }
+  }
+
+  async function dequeue(): Promise<StreamChunk | Error> {
+    while (queue.length === 0) {
+      await new Promise<void>((r) => { resolve = r; });
+    }
+    return queue.shift()!;
+  }
+
+  const deliver = async (
+    payload: { text?: string },
+    info: { kind: string },
+  ) => {
+    if (done) return;
+    if (payload.text) {
+      enqueue({ text: payload.text, isFinal: info.kind === "final" });
+    }
+  };
+
+  const { dispatcher, replyOptions, markDispatchIdle } =
+    reply.createReplyDispatcherWithTyping({ deliver });
+
+  const cfg = api.runtime.config.loadConfig();
+  const effectiveTimeout = getEffectiveTimeout(config);
+
+  // Start dispatch in background
+  const dispatchPromise = (async () => {
+    try {
+      await reply.dispatchReplyFromConfig({ ctx, cfg, dispatcher, replyOptions });
+      dispatcher.markComplete();
+      await dispatcher.waitForIdle();
+      markDispatchIdle();
+    } catch (err) {
+      enqueue(err instanceof Error ? err : new Error(String(err)));
+    }
+  })();
+
+  // Timeout watcher
+  const timeoutId = setTimeout(() => {
+    enqueue(new TimeoutError());
+  }, effectiveTimeout);
+
+  // Abort signal watcher
+  const abortHandler = signal ? () => {
+    enqueue(new AbortError());
+  } : null;
+  if (abortHandler && signal) {
+    if (signal.aborted) {
+      clearTimeout(timeoutId);
+      done = true;
+      throw new AbortError();
+    }
+    signal.addEventListener("abort", abortHandler, { once: true });
+  }
+
+  try {
+    while (!done) {
+      const item = await dequeue();
+      if (item instanceof Error) {
+        throw item;
+      }
+      yield item;
+      if (item.isFinal) {
+        done = true;
+      }
+    }
+  } finally {
+    done = true;
+    clearTimeout(timeoutId);
+    if (abortHandler && signal) {
+      signal.removeEventListener("abort", abortHandler);
+    }
+    await dispatchPromise;
+  }
 }
 
 // Re-export for use in timeout error handling

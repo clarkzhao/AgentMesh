@@ -114,19 +114,42 @@ describe("a2a-contract", () => {
     expect(body.error.message).toBe("Task not found");
   });
 
-  it("tasks/cancel returns -32601 (not yet implemented)", async () => {
+  it("tasks/cancel on unknown task returns -32001", async () => {
     const { handler } = setup();
     const req = createMockRequest("POST", {
       jsonrpc: "2.0",
       id: "req-1",
       method: "tasks/cancel",
+      params: { id: "nonexistent" },
     });
     const res = createMockResponse();
 
     await handler(req, res);
 
     const body = JSON.parse(res._body);
-    expect(body.error.code).toBe(-32601);
+    expect(body.error.code).toBe(-32001);
+  });
+
+  it("tasks/cancel on completed task returns task as-is", async () => {
+    const { handler } = setup();
+
+    // First: send a task
+    const sendReq = createMockRequest("POST", validA2aRequest());
+    const sendRes = createMockResponse();
+    await handler(sendReq, sendRes);
+
+    // Then: cancel it (already completed)
+    const cancelReq = createMockRequest("POST", {
+      jsonrpc: "2.0",
+      id: "req-cancel",
+      method: "tasks/cancel",
+      params: { id: "task-1" },
+    });
+    const cancelRes = createMockResponse();
+    await handler(cancelReq, cancelRes);
+
+    const body = JSON.parse(cancelRes._body);
+    expect(body.result.status.state).toBe("completed");
   });
 
   it("error responses have code (integer) and message (string)", async () => {

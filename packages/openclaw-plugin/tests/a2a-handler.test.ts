@@ -106,20 +106,20 @@ describe("a2a-handler", () => {
       expect(body.error.message).toBe("Method not found");
     });
 
-    it("returns -32601 for tasks/cancel (not yet implemented)", async () => {
+    it("returns -32602 for tasks/cancel without id", async () => {
       const { handler } = setup({ auth: { token: null, allowUnauthenticated: true } });
       const req = createMockRequest("POST", {
         jsonrpc: "2.0",
         id: "1",
         method: "tasks/cancel",
+        params: {},
       });
       const res = createMockResponse();
 
       await handler(req, res);
 
       const body = JSON.parse(res._body);
-      expect(body.error.code).toBe(-32601);
-      expect(body.error.message).toContain("not supported");
+      expect(body.error.code).toBe(-32602);
     });
 
     it("rejects non-POST requests", async () => {

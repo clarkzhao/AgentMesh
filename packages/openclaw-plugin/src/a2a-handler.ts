@@ -7,10 +7,13 @@ import type {
   A2aMessageSendParams,
   A2aTaskSendParams,
   A2aTaskGetParams,
+  A2aTaskCancelParams,
   A2aMessage,
   A2aPart,
   A2aTask,
   A2aTaskState,
+  A2aTaskStatusUpdateEvent,
+  A2aTaskArtifactUpdateEvent,
 } from "./types.js";
 import {
   readJsonBody,
@@ -20,18 +23,16 @@ import {
   JsonParseError,
   TimeoutError,
 } from "./utils.js";
-import { dispatchToAgent, handleDispatchTimeout } from "./dispatch.js";
+import { dispatchToAgent, dispatchToAgentStreaming, AbortError } from "./dispatch.js";
 import { TaskStore } from "./task-store.js";
-
-/** Terminal states for A2A tasks */
-const TERMINAL_STATES: Set<A2aTaskState> = new Set([
-  "completed", "failed", "canceled", "rejected",
-]);
 
 export function createA2aHandler(opts: { api: OpenClawPluginApi; config: PluginConfig }) {
   const { api, config } = opts;
   const taskStore = new TaskStore();
   taskStore.start();
+
+  /** Active dispatches for cancellation support */
+  const activeDispatches = new Map<string, AbortController>();
 
   return async (req: IncomingMessage, res: ServerResponse) => {
     // Only accept POST
@@ -90,16 +91,17 @@ export function createA2aHandler(opts: { api: OpenClawPluginApi; config: PluginC
     switch (rpc.method) {
       case "message/send":
       case "tasks/send":
-        await handleMessageSend(res, rpc, api, config, taskStore);
+        await handleMessageSend(res, rpc, api, config, taskStore, activeDispatches);
+        break;
+      case "message/stream":
+      case "tasks/sendSubscribe":
+        await handleMessageStream(res, rpc, api, config, taskStore, activeDispatches);
         break;
       case "tasks/get":
         handleTasksGet(res, rpc, taskStore);
         break;
       case "tasks/cancel":
-        sendJsonRpcError(res, rpc.id, {
-          code: -32601,
-          message: "tasks/cancel not supported in this version",
-        });
+        handleTasksCancel(res, rpc, taskStore, activeDispatches);
         break;
       default:
         sendJsonRpcError(res, rpc.id, { code: -32601, message: "Method not found" });
@@ -140,7 +142,6 @@ function resolveAgentId(config: PluginConfig, message: A2aMessage): string {
 
 /**
  * Extract part discriminator — accept both `kind` (0.3.x) and `type` (legacy).
- * Returns the discriminator value (e.g. "text", "file", "data").
  */
 function partKind(part: A2aPart | Record<string, unknown>): string {
   return (part as A2aPart).kind ?? (part as Record<string, unknown>).type as string ?? "unknown";
@@ -151,26 +152,25 @@ function dualTextPart(text: string): A2aPart & { type: string } {
   return { kind: "text", type: "text", text } as A2aPart & { type: string };
 }
 
-async function handleMessageSend(
-  res: ServerResponse,
-  rpc: A2aJsonRpcRequest,
-  api: OpenClawPluginApi,
-  config: PluginConfig,
-  taskStore: TaskStore,
-): Promise<void> {
-  // Accept both new (A2aMessageSendParams) and legacy (A2aTaskSendParams) shapes
+/** Parse and validate send params (shared between sync and streaming handlers) */
+function parseSendParams(rpc: A2aJsonRpcRequest, config: PluginConfig, res: ServerResponse): {
+  taskId: string;
+  message: string;
+  contextId: string;
+  agentId: string;
+  sessionKey: string;
+  messageId: string;
+  userParts: A2aPart[];
+} | null {
   const params = rpc.params as (A2aMessageSendParams & A2aTaskSendParams) | undefined;
-
-  // Resolve task ID: legacy `params.id` or generate from RPC id
   const taskId = params?.id ?? String(rpc.id);
 
-  // Validate message exists
   if (!params?.message) {
     sendJsonRpcError(res, rpc.id, {
       code: -32602,
       message: "Invalid params: missing id or message",
     });
-    return;
+    return null;
   }
 
   if (!params.message.role || !Array.isArray(params.message.parts)) {
@@ -178,10 +178,9 @@ async function handleMessageSend(
       code: -32602,
       message: "Invalid params: message must have role and parts",
     });
-    return;
+    return null;
   }
 
-  // Extract text from parts — dual-accept `kind` and `type` discriminators
   const textParts: string[] = [];
   for (const part of params.message.parts) {
     const pk = partKind(part);
@@ -197,22 +196,31 @@ async function handleMessageSend(
       code: -32602,
       message: "Invalid params: message has no text parts",
     });
-    return;
+    return null;
   }
 
   const message = textParts.join("\n");
-
-  // Resolve context_id: prefer `context_id`, fall back to `sessionId`, then taskId
   const contextId = params.message.context_id ?? params.sessionId ?? taskId;
-
-  // Resolve agent identity
   const agentId = resolveAgentId(config, params.message);
   const sessionKey = resolveSessionKey(config, agentId, taskId, contextId);
-
-  // Generate message_id for the user message if not provided
   const messageId = params.message.message_id ?? crypto.randomUUID();
 
-  // Mark task as submitted
+  return { taskId, message, contextId, agentId, sessionKey, messageId, userParts: params.message.parts };
+}
+
+async function handleMessageSend(
+  res: ServerResponse,
+  rpc: A2aJsonRpcRequest,
+  api: OpenClawPluginApi,
+  config: PluginConfig,
+  taskStore: TaskStore,
+  activeDispatches: Map<string, AbortController>,
+): Promise<void> {
+  const parsed = parseSendParams(rpc, config, res);
+  if (!parsed) return;
+
+  const { taskId, message, contextId, agentId, sessionKey, messageId, userParts } = parsed;
+
   taskStore.set(taskId, {
     id: taskId,
     kind: "task",
@@ -223,6 +231,9 @@ async function handleMessageSend(
   const isSharedSession =
     config.session.strategy === "per-conversation" || config.session.strategy === "shared";
 
+  const abortController = new AbortController();
+  activeDispatches.set(taskId, abortController);
+
   try {
     const replyText = await dispatchToAgent({
       api,
@@ -231,13 +242,14 @@ async function handleMessageSend(
       sessionKey,
       taskId,
       agentId,
+      signal: abortController.signal,
     });
 
     const userMessage: A2aMessage = {
       message_id: messageId,
       kind: "message",
       role: "user",
-      parts: params.message.parts,
+      parts: userParts,
       context_id: contextId,
     };
     const agentParts = [dualTextPart(replyText)];
@@ -253,7 +265,6 @@ async function handleMessageSend(
       id: taskId,
       kind: "task",
       context_id: contextId,
-      // Dual-format: also include sessionId for legacy clients
       sessionId: contextId,
       status: { state: "completed" },
       artifacts: [{ name: "response", parts: agentParts as A2aPart[] }],
@@ -268,6 +279,21 @@ async function handleMessageSend(
       result: task,
     });
   } catch (err) {
+    if (err instanceof AbortError) {
+      taskStore.set(taskId, {
+        id: taskId,
+        kind: "task",
+        context_id: contextId,
+        status: { state: "canceled" },
+      });
+      sendJsonRpcError(res, rpc.id, {
+        code: -32000,
+        message: "Task canceled",
+        data: { state: "canceled" },
+      });
+      return;
+    }
+
     if (err instanceof TimeoutError) {
       if (!isSharedSession) {
         taskStore.set(taskId, {
@@ -297,6 +323,207 @@ async function handleMessageSend(
       code: -32000,
       message: err instanceof Error ? err.message : "Agent error",
     });
+  } finally {
+    activeDispatches.delete(taskId);
+  }
+}
+
+/** Send an SSE event */
+function sendSseEvent(res: ServerResponse, data: unknown): boolean {
+  try {
+    res.write(`data: ${JSON.stringify(data)}\n\n`);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function handleMessageStream(
+  res: ServerResponse,
+  rpc: A2aJsonRpcRequest,
+  api: OpenClawPluginApi,
+  config: PluginConfig,
+  taskStore: TaskStore,
+  activeDispatches: Map<string, AbortController>,
+): Promise<void> {
+  const parsed = parseSendParams(rpc, config, res);
+  if (!parsed) return;
+
+  const { taskId, message, contextId, agentId, sessionKey, messageId, userParts } = parsed;
+
+  // Record initial state
+  taskStore.set(taskId, {
+    id: taskId,
+    kind: "task",
+    context_id: contextId,
+    status: { state: "submitted" },
+  });
+
+  // Set SSE headers
+  res.writeHead(200, {
+    "Content-Type": "text/event-stream",
+    "Cache-Control": "no-cache",
+    "Connection": "keep-alive",
+  });
+
+  // Mark as working
+  taskStore.set(taskId, {
+    id: taskId,
+    kind: "task",
+    context_id: contextId,
+    status: { state: "working" },
+  });
+
+  // Send initial working status-update
+  const initialEvent: A2aTaskStatusUpdateEvent = {
+    kind: "status-update",
+    task_id: taskId,
+    context_id: contextId,
+    status: { state: "working" },
+    final: false,
+  };
+  sendSseEvent(res, initialEvent);
+
+  const abortController = new AbortController();
+  activeDispatches.set(taskId, abortController);
+
+  // Track client disconnect
+  let clientDisconnected = false;
+  res.on("close", () => {
+    clientDisconnected = true;
+    abortController.abort();
+  });
+
+  try {
+    const allChunks: string[] = [];
+
+    for await (const chunk of dispatchToAgentStreaming({
+      api,
+      config,
+      message,
+      sessionKey,
+      taskId,
+      agentId,
+      signal: abortController.signal,
+    })) {
+      if (clientDisconnected) break;
+
+      allChunks.push(chunk.text);
+
+      if (!chunk.isFinal) {
+        // Intermediate chunk: status-update with working state
+        const statusEvent: A2aTaskStatusUpdateEvent = {
+          kind: "status-update",
+          task_id: taskId,
+          context_id: contextId,
+          status: {
+            state: "working",
+            message: {
+              role: "agent",
+              parts: [dualTextPart(chunk.text)] as A2aPart[],
+            },
+          },
+          final: false,
+        };
+        sendSseEvent(res, statusEvent);
+      } else {
+        // Final chunk
+        const fullText = allChunks.join("");
+        const agentParts = [dualTextPart(fullText)];
+
+        const userMessage: A2aMessage = {
+          message_id: messageId,
+          kind: "message",
+          role: "user",
+          parts: userParts,
+          context_id: contextId,
+        };
+        const agentMessage: A2aMessage = {
+          message_id: crypto.randomUUID(),
+          kind: "message",
+          role: "agent",
+          parts: agentParts as A2aPart[],
+          context_id: contextId,
+        };
+
+        const completedTask: A2aTask & { sessionId?: string } = {
+          id: taskId,
+          kind: "task",
+          context_id: contextId,
+          sessionId: contextId,
+          status: { state: "completed" },
+          artifacts: [{ name: "response", parts: agentParts as A2aPart[] }],
+          history: [userMessage, agentMessage],
+        };
+
+        taskStore.set(taskId, completedTask);
+
+        // Send completed status-update
+        const completedEvent: A2aTaskStatusUpdateEvent = {
+          kind: "status-update",
+          task_id: taskId,
+          context_id: contextId,
+          status: { state: "completed" },
+          final: true,
+        };
+        sendSseEvent(res, completedEvent);
+
+        // Send artifact-update
+        const artifactEvent: A2aTaskArtifactUpdateEvent = {
+          kind: "artifact-update",
+          task_id: taskId,
+          context_id: contextId,
+          artifact: { name: "response", parts: agentParts as A2aPart[] },
+          last_chunk: true,
+        };
+        sendSseEvent(res, artifactEvent);
+      }
+    }
+  } catch (err) {
+    if (clientDisconnected) {
+      // Client disconnected — mark task as failed in store, clean up silently
+      taskStore.set(taskId, {
+        id: taskId,
+        kind: "task",
+        context_id: contextId,
+        status: { state: "failed", error: "Client disconnected" },
+      });
+    } else if (err instanceof AbortError) {
+      taskStore.set(taskId, {
+        id: taskId,
+        kind: "task",
+        context_id: contextId,
+        status: { state: "canceled" },
+      });
+      const cancelEvent: A2aTaskStatusUpdateEvent = {
+        kind: "status-update",
+        task_id: taskId,
+        context_id: contextId,
+        status: { state: "canceled" },
+        final: true,
+      };
+      sendSseEvent(res, cancelEvent);
+    } else {
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      taskStore.set(taskId, {
+        id: taskId,
+        kind: "task",
+        context_id: contextId,
+        status: { state: "failed", error: errorMsg },
+      });
+
+      const failedEvent: A2aTaskStatusUpdateEvent = {
+        kind: "status-update",
+        task_id: taskId,
+        context_id: contextId,
+        status: { state: "failed", error: errorMsg },
+        final: true,
+      };
+      sendSseEvent(res, failedEvent);
+    }
+  } finally {
+    activeDispatches.delete(taskId);
+    res.end();
   }
 }
 
@@ -328,5 +555,61 @@ function handleTasksGet(
     jsonrpc: "2.0",
     id: rpc.id,
     result: task,
+  });
+}
+
+function handleTasksCancel(
+  res: ServerResponse,
+  rpc: A2aJsonRpcRequest,
+  taskStore: TaskStore,
+  activeDispatches: Map<string, AbortController>,
+): void {
+  const params = rpc.params as A2aTaskCancelParams | undefined;
+
+  if (!params?.id) {
+    sendJsonRpcError(res, rpc.id, {
+      code: -32602,
+      message: "Invalid params: missing id",
+    });
+    return;
+  }
+
+  const task = taskStore.get(params.id);
+  if (!task) {
+    sendJsonRpcError(res, rpc.id, {
+      code: -32001,
+      message: "Task not found",
+    });
+    return;
+  }
+
+  // If already terminal, return current task unchanged
+  const terminalStates: Set<A2aTaskState> = new Set(["completed", "failed", "canceled", "rejected"]);
+  if (terminalStates.has(task.status.state)) {
+    sendJsonRpcResponse(res, {
+      jsonrpc: "2.0",
+      id: rpc.id,
+      result: task,
+    });
+    return;
+  }
+
+  // Abort active dispatch if present
+  const controller = activeDispatches.get(params.id);
+  if (controller) {
+    controller.abort();
+  }
+
+  // Mark task as canceled
+  taskStore.set(params.id, {
+    ...task,
+    status: { state: "canceled" },
+  });
+
+  const updatedTask = taskStore.get(params.id);
+  sendJsonRpcResponse(res, {
+    jsonrpc: "2.0",
+    id: rpc.id,
+    result: updatedTask!,
   });
 }
