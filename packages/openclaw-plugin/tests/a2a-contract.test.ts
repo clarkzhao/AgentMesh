@@ -232,7 +232,7 @@ describe("a2a-contract", () => {
     expect(capturedSessionKey).toBe("a2a:main:fixed-session-42");
   });
 
-  it("response includes dual-format output for backward compat", async () => {
+  it("response uses kind discriminator and context_id (legacy fields stripped)", async () => {
     const { handler } = setup();
     const req = createMockRequest("POST", validA2aRequest());
     const res = createMockResponse();
@@ -242,13 +242,13 @@ describe("a2a-contract", () => {
     const body = JSON.parse(res._body);
     const result = body.result;
 
-    // Dual-format: both kind and type on parts
+    // Only kind, no type
     expect(result.artifacts[0].parts[0].kind).toBe("text");
-    expect(result.artifacts[0].parts[0].type).toBe("text");
+    expect(result.artifacts[0].parts[0].type).toBeUndefined();
 
-    // Dual-format: sessionId present alongside context_id
-    // (sessionId mirrors context_id for legacy clients)
-    expect(result.sessionId).toBeDefined();
+    // context_id present, sessionId stripped
+    expect(result.context_id).toBeDefined();
+    expect(result.sessionId).toBeUndefined();
   });
 
   it("response includes protocol_version via AgentCard", async () => {

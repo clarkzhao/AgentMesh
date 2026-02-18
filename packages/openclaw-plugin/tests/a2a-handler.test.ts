@@ -259,7 +259,7 @@ describe("a2a-handler", () => {
       expect(capturedCtx?.SessionKey).toBe("a2a:main:legacy-session-42");
     });
 
-    it("emits dual-format output with both kind and type", async () => {
+    it("emits output with kind discriminator only (legacy type stripped)", async () => {
       const { handler } = setup({ auth: { token: null, allowUnauthenticated: true } });
       const req = createMockRequest("POST", validA2aRequest());
       const res = createMockResponse();
@@ -269,7 +269,7 @@ describe("a2a-handler", () => {
       const body = JSON.parse(res._body);
       const agentPart = body.result.artifacts[0].parts[0];
       expect(agentPart.kind).toBe("text");
-      expect(agentPart.type).toBe("text");
+      expect(agentPart.type).toBeUndefined();
     });
   });
 

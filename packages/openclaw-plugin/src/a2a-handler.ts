@@ -10,6 +10,7 @@ import type {
   A2aTaskCancelParams,
   A2aMessage,
   A2aPart,
+  A2aTextPart,
   A2aTask,
   A2aTaskState,
   A2aTaskStatusUpdateEvent,
@@ -147,9 +148,9 @@ function partKind(part: A2aPart | Record<string, unknown>): string {
   return (part as A2aPart).kind ?? (part as Record<string, unknown>).type as string ?? "unknown";
 }
 
-/** Create a dual-format text part (emits both `kind` and `type` for backward compat) */
-function dualTextPart(text: string): A2aPart & { type: string } {
-  return { kind: "text", type: "text", text } as A2aPart & { type: string };
+/** Create a text part */
+function textPart(text: string): A2aTextPart {
+  return { kind: "text", text };
 }
 
 /** Parse and validate send params (shared between sync and streaming handlers) */
@@ -252,7 +253,7 @@ async function handleMessageSend(
       parts: userParts,
       context_id: contextId,
     };
-    const agentParts = [dualTextPart(replyText)];
+    const agentParts = [textPart(replyText)];
     const agentMessage: A2aMessage = {
       message_id: crypto.randomUUID(),
       kind: "message",
@@ -261,11 +262,10 @@ async function handleMessageSend(
       context_id: contextId,
     };
 
-    const task: A2aTask & { sessionId?: string } = {
+    const task: A2aTask = {
       id: taskId,
       kind: "task",
       context_id: contextId,
-      sessionId: contextId,
       status: { state: "completed" },
       artifacts: [{ name: "response", parts: agentParts as A2aPart[] }],
       history: [userMessage, agentMessage],
@@ -420,7 +420,7 @@ async function handleMessageStream(
             state: "working",
             message: {
               role: "agent",
-              parts: [dualTextPart(chunk.text)] as A2aPart[],
+              parts: [textPart(chunk.text)] as A2aPart[],
             },
           },
           final: false,
@@ -429,7 +429,7 @@ async function handleMessageStream(
       } else {
         // Final chunk
         const fullText = allChunks.join("");
-        const agentParts = [dualTextPart(fullText)];
+        const agentParts = [textPart(fullText)];
 
         const userMessage: A2aMessage = {
           message_id: messageId,
@@ -446,11 +446,10 @@ async function handleMessageStream(
           context_id: contextId,
         };
 
-        const completedTask: A2aTask & { sessionId?: string } = {
+        const completedTask: A2aTask = {
           id: taskId,
           kind: "task",
           context_id: contextId,
-          sessionId: contextId,
           status: { state: "completed" },
           artifacts: [{ name: "response", parts: agentParts as A2aPart[] }],
           history: [userMessage, agentMessage],
