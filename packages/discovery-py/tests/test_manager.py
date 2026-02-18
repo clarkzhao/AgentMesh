@@ -10,12 +10,12 @@ class TestDiscoveryManager:
 
         mdns_agent = DiscoveredAgent(
             name="Agent1",
-            agent_card_url="http://localhost:18789/.well-known/agent.json",
+            agent_card_url="http://localhost:18789/.well-known/agent-card.json",
             source="mdns",
         )
         static_agent = DiscoveredAgent(
             name="Agent1-Static",
-            agent_card_url="http://localhost:18789/.well-known/agent.json",
+            agent_card_url="http://localhost:18789/.well-known/agent-card.json",
             source="static",
         )
 
@@ -32,12 +32,12 @@ class TestDiscoveryManager:
         agents = [
             DiscoveredAgent(
                 name="Agent1",
-                agent_card_url="http://host1/.well-known/agent.json",
+                agent_card_url="http://host1/.well-known/agent-card.json",
                 source="mdns",
             ),
             DiscoveredAgent(
                 name="Agent2",
-                agent_card_url="http://host2/.well-known/agent.json",
+                agent_card_url="http://host2/.well-known/agent-card.json",
                 source="static",
             ),
         ]

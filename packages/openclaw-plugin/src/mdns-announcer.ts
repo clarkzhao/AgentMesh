@@ -23,7 +23,7 @@ export class MdnsAnnouncer {
       protocol: "tcp",
       port: this.options.port,
       txt: {
-        url: `${this.options.publicBaseUrl}/.well-known/agent.json`,
+        url: `${this.options.publicBaseUrl}/.well-known/agent-card.json`,
         name: this.options.agentName,
         v: "1",
       },

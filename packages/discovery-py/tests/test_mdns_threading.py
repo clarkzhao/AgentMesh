@@ -9,7 +9,7 @@ from agentmesh_discovery.types import DiscoveredAgent
 
 def _make_service_info(idx: int) -> MagicMock:
     info = MagicMock()
-    url = f"http://192.168.1.{idx}:18789/.well-known/agent.json"
+    url = f"http://192.168.1.{idx}:18789/.well-known/agent-card.json"
     info.properties = {
         b"url": url.encode(),
         b"name": f"Agent{idx}".encode(),

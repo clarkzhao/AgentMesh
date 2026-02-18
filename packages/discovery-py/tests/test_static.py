@@ -13,8 +13,8 @@ class TestStaticDiscovery:
             json.dumps(
                 {
                     "agents": [
-                        {"name": "Agent1", "url": "http://localhost:18789/.well-known/agent.json"},
-                        {"name": "Agent2", "url": "http://localhost:18790/.well-known/agent.json"},
+                        {"name": "Agent1", "url": "http://localhost:18789/.well-known/agent-card.json"},
+                        {"name": "Agent2", "url": "http://localhost:18790/.well-known/agent-card.json"},
                     ]
                 }
             )
@@ -25,7 +25,7 @@ class TestStaticDiscovery:
 
         assert len(agents) == 2
         assert agents[0].name == "Agent1"
-        assert agents[0].agent_card_url == "http://localhost:18789/.well-known/agent.json"
+        assert agents[0].agent_card_url == "http://localhost:18789/.well-known/agent-card.json"
         assert agents[0].source == "static"
         assert agents[1].name == "Agent2"
 

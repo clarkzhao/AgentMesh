@@ -29,12 +29,6 @@ const plugin: {
       handler: agentCardHandler,
     });
 
-    // Register /.well-known/agent.json (legacy path, kept for backward compat)
-    api.registerHttpRoute({
-      path: "/.well-known/agent.json",
-      handler: agentCardHandler,
-    });
-
     // Register /a2a endpoint (token-gated)
     api.registerHttpRoute({
       path: "/a2a",

@@ -15,7 +15,7 @@ def _make_service_info(
 ) -> MagicMock:
     info = MagicMock()
     props = txt or {
-        "url": "http://192.168.1.42:18789/.well-known/agent.json",
+        "url": "http://192.168.1.42:18789/.well-known/agent-card.json",
         "name": "TestAgent",
         "v": "1",
     }
@@ -47,7 +47,7 @@ class TestMdnsDiscovery:
         assert len(found) == 1
         agent = found[0]
         assert agent.name == "TestAgent"
-        assert agent.agent_card_url == "http://192.168.1.42:18789/.well-known/agent.json"
+        assert agent.agent_card_url == "http://192.168.1.42:18789/.well-known/agent-card.json"
         assert agent.host == "192.168.1.42"
         assert agent.port == 18789
         assert agent.source == "mdns"
@@ -95,5 +95,5 @@ class TestMdnsDiscovery:
         listener.add_service(zc, "_a2a._tcp.local.", "TestAgent._a2a._tcp.local.")
 
         assert len(agents) == 1
-        url = "http://192.168.1.42:18789/.well-known/agent.json"
+        url = "http://192.168.1.42:18789/.well-known/agent-card.json"
         assert url in agents

@@ -200,8 +200,8 @@ Example output:
 
 ```
 Discovering A2A agents via mDNS...
-Found agent: OpenClaw at http://127.0.0.1:18789/.well-known/agent.json
-Fetching AgentCard from http://127.0.0.1:18789/.well-known/agent.json...
+Found agent: OpenClaw at http://127.0.0.1:18789/.well-known/agent-card.json
+Fetching AgentCard from http://127.0.0.1:18789/.well-known/agent-card.json...
 Agent: OpenClaw — An OpenClaw agent exposed via A2A
 A2A endpoint: http://127.0.0.1:18789/a2a
 Skills: Chat
@@ -217,17 +217,14 @@ You can also skip mDNS discovery and target the agent directly:
 
 ```bash
 AGENTMESH_TOKEN=your-secret-token uv run python examples/py-agent/main.py \
-  --url http://127.0.0.1:18789/.well-known/agent.json "Hello!"
+  --url http://127.0.0.1:18789/.well-known/agent-card.json "Hello!"
 ```
 
 ### Verify Manually
 
 ```bash
-# AgentCard (public, no auth) — new path
+# AgentCard (public, no auth)
 curl http://localhost:18789/.well-known/agent-card.json
-
-# AgentCard (legacy path, still works)
-curl http://localhost:18789/.well-known/agent.json
 
 # Sync message (requires auth)
 curl -X POST http://localhost:18789/a2a \
@@ -275,7 +272,7 @@ asyncio.run(main())
 
 Exposes any OpenClaw agent as a standard A2A agent:
 
-- Serves `GET /.well-known/agent-card.json` (and legacy `/.well-known/agent.json`)
+- Serves `GET /.well-known/agent-card.json`
 - Accepts `POST /a2a` (A2A JSON-RPC: `message/send`, `message/stream`, `tasks/get`, `tasks/cancel`)
 - SSE streaming with status-update and artifact-update events
 - Multi-agent routing via `skill_id` in message metadata
@@ -336,7 +333,7 @@ make check-discovery-py      # Lint + typecheck Python SDK
 
 ```
 1. OpenClaw gateway starts with agentmesh-a2a plugin
-   → Serves AgentCard at /.well-known/agent-card.json (and legacy /agent.json)
+   → Serves AgentCard at /.well-known/agent-card.json
    → Announces _a2a._tcp via mDNS
    → Listens for A2A messages at POST /a2a
 
