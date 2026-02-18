@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from typing import Any, cast
+from typing import Any
 
 import httpx
 
-from agentmesh_discovery.types import AgentCard, AgentSkill, DiscoveredAgent
+from agentmesh_discovery.types import AgentCard, DiscoveredAgent
 
 
 class DiscoveryManager:
@@ -28,26 +28,4 @@ class DiscoveryManager:
             resp.raise_for_status()
             data: dict[str, Any] = resp.json()
 
-        skills: list[AgentSkill] = []
-        for s in data.get("skills", []):
-            if isinstance(s, dict):
-                s_dict = cast(dict[str, Any], s)
-                skills.append(
-                    AgentSkill(
-                        id=str(s_dict.get("id", "")),
-                        name=str(s_dict.get("name", "")),
-                        description=str(s_dict.get("description", "")),
-                    )
-                )
-
-        return AgentCard(
-            name=str(data.get("name", "")),
-            url=str(data.get("url", "")),
-            version=str(data.get("version", "")),
-            description=str(data.get("description", "")),
-            capabilities=data.get("capabilities", {}),
-            skills=skills,
-            security_schemes=data.get("securitySchemes", {}),
-            default_input_modes=data.get("defaultInputModes", ["text"]),
-            default_output_modes=data.get("defaultOutputModes", ["text"]),
-        )
+        return AgentCard.model_validate(data)
