@@ -13,8 +13,14 @@ class TestStaticDiscovery:
             json.dumps(
                 {
                     "agents": [
-                        {"name": "Agent1", "url": "http://localhost:18789/.well-known/agent-card.json"},
-                        {"name": "Agent2", "url": "http://localhost:18790/.well-known/agent-card.json"},
+                        {
+                            "name": "Agent1",
+                            "url": "http://localhost:18789/.well-known/agent-card.json",
+                        },
+                        {
+                            "name": "Agent2",
+                            "url": "http://localhost:18790/.well-known/agent-card.json",
+                        },
                     ]
                 }
             )
@@ -36,7 +42,9 @@ class TestStaticDiscovery:
 
     def test_skips_entries_without_url(self, tmp_path: Path) -> None:
         bootstrap = tmp_path / "bootstrap.json"
-        bootstrap.write_text(json.dumps({"agents": [{"name": "NoUrl"}, {"name": "HasUrl", "url": "http://x"}]}))
+        bootstrap.write_text(
+            json.dumps({"agents": [{"name": "NoUrl"}, {"name": "HasUrl", "url": "http://x"}]})
+        )
 
         discovery = StaticDiscovery(bootstrap)
         agents = discovery.discover()
