@@ -72,11 +72,39 @@
           "properties": {
             "id": { "type": "string" },
             "name": { "type": "string" },
-            "description": { "type": "string" }
+            "description": { "type": "string" },
+            "tags": { "type": "array", "items": { "type": "string" }, "default": [] }
           },
           "required": ["id", "name", "description"]
         },
-        "description": "Skills listed in the A2A AgentCard"
+        "description": "Skills listed in the A2A AgentCard (used with single-agent config)"
+      },
+      "agents": {
+        "type": "object",
+        "additionalProperties": {
+          "type": "object",
+          "properties": {
+            "agentId": {
+              "type": "string",
+              "description": "OpenClaw agent identity to route to"
+            },
+            "skills": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "id": { "type": "string" },
+                  "name": { "type": "string" },
+                  "description": { "type": "string" },
+                  "tags": { "type": "array", "items": { "type": "string" }, "default": [] }
+                },
+                "required": ["id", "name", "description"]
+              }
+            }
+          },
+          "required": ["agentId", "skills"]
+        },
+        "description": "Multi-agent routing: map skill_id to different OpenClaw agent identities. Overrides top-level skills."
       }
     }
   },
