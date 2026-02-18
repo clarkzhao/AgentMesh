@@ -83,6 +83,26 @@ async def main() -> None:
             elif isinstance(event, tuple):
                 task, update = event
                 if isinstance(update, TaskStatusUpdateEvent):
+                    metadata = update.metadata if isinstance(update.metadata, dict) else {}
+                    stream_event_type = metadata.get("stream_event_type")
+                    if stream_event_type == "tool":
+                        tool = metadata.get("tool", {})
+                        if isinstance(tool, dict):
+                            tool_name = str(tool.get("name", "unknown"))
+                            tool_phase = str(tool.get("phase", "update"))
+                            print(f"[Tool {tool_phase}: {tool_name}]")
+                            continue
+                    elif stream_event_type == "reasoning":
+                        reasoning = metadata.get("reasoning", {})
+                        if isinstance(reasoning, dict):
+                            reasoning_text = reasoning.get("text")
+                            reasoning_ended = reasoning.get("ended") is True
+                            if isinstance(reasoning_text, str) and reasoning_text:
+                                print(f"[Reasoning] {reasoning_text}")
+                            elif reasoning_ended:
+                                print("[Reasoning ended]")
+                            continue
+
                     print(f"[Status: {update.status.state.value}]", end="")
                     if update.status.message:
                         for part in update.status.message.parts:

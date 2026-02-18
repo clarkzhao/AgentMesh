@@ -8,6 +8,15 @@ import type { PluginConfig } from "../src/types.js";
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type MockApi = any;
 type DeliverFn = (payload: { text?: string }, info: { kind: string }) => Promise<void>;
+type MockReplyOptions = {
+  onToolStart?: (payload: { name?: string; phase?: string }) => Promise<void> | void;
+  onReasoningStream?: (payload: { text?: string }) => Promise<void> | void;
+  onReasoningEnd?: () => Promise<void> | void;
+};
+export type StreamingMockEvent =
+  | { text: string; kind: string }
+  | { type: "tool"; name?: string; phase?: string }
+  | { type: "reasoning"; text?: string; ended?: boolean };
 
 export function createMockApi(overrides: Record<string, unknown> = {}): MockApi {
   const events = new EventEmitter();
@@ -99,7 +108,7 @@ export function createMockApiWithReply(
 }
 
 export function createMockApiWithStreamingReply(
-  chunks: Array<{ text: string; kind: string }>,
+  chunks: StreamingMockEvent[],
   delay = 0,
 ): MockApi {
   let capturedDeliver: DeliverFn | null = null;
@@ -116,12 +125,23 @@ export function createMockApiWithStreamingReply(
       markDispatchIdle: () => {},
     };
   };
-  api.runtime.channel.reply.dispatchReplyFromConfig = async () => {
-    for (const chunk of chunks) {
+  api.runtime.channel.reply.dispatchReplyFromConfig = async (params: { replyOptions?: MockReplyOptions } = {}) => {
+    for (const event of chunks) {
       if (delay > 0) {
         await new Promise((resolve) => setTimeout(resolve, delay));
       }
-      await capturedDeliver?.({ text: chunk.text }, { kind: chunk.kind });
+      if ("kind" in event) {
+        await capturedDeliver?.({ text: event.text }, { kind: event.kind });
+      } else if (event.type === "tool") {
+        await params.replyOptions?.onToolStart?.({ name: event.name, phase: event.phase });
+      } else {
+        if (event.text !== undefined) {
+          await params.replyOptions?.onReasoningStream?.({ text: event.text });
+        }
+        if (event.ended) {
+          await params.replyOptions?.onReasoningEnd?.();
+        }
+      }
     }
   };
   return api;

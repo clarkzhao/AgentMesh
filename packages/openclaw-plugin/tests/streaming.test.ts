@@ -8,6 +8,7 @@ import {
   validA2aRequest,
   validLegacyA2aRequest,
   defaultPluginConfig,
+  type StreamingMockEvent,
 } from "./helpers.js";
 import type { PluginConfig } from "../src/types.js";
 
@@ -22,7 +23,7 @@ function setup(configOverrides: Partial<PluginConfig> = {}, replyText = "Streame
 }
 
 function setupStreaming(
-  chunks: Array<{ text: string; kind: string }>,
+  chunks: StreamingMockEvent[],
   configOverrides: Partial<PluginConfig> = {},
 ) {
   const config = defaultPluginConfig({
@@ -141,6 +142,62 @@ describe("streaming (message/stream)", () => {
         ((e as Record<string, unknown>).status as Record<string, unknown>).message !== undefined,
     );
     expect(intermediateEvents.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("streams tool lifecycle events in status metadata", async () => {
+    const { handler } = setupStreaming([
+      { type: "tool", name: "exec", phase: "start" },
+      { type: "tool", name: "exec", phase: "end" },
+      { text: "Done", kind: "final" },
+    ]);
+    const req = createMockRequest("POST", {
+      ...validA2aRequest(),
+      method: "message/stream",
+    });
+    const res = createMockResponse();
+
+    await handler(req, res);
+
+    const events = parseChunks(res) as Array<Record<string, unknown>>;
+    const toolEvents = events.filter(
+      (e) =>
+        e.kind === "status-update" &&
+        ((e.metadata as Record<string, unknown> | undefined)?.stream_event_type === "tool"),
+    );
+
+    expect(toolEvents.length).toBe(2);
+    expect(((toolEvents[0].metadata as Record<string, unknown>).tool as Record<string, unknown>).name).toBe("exec");
+    expect(((toolEvents[0].metadata as Record<string, unknown>).tool as Record<string, unknown>).phase).toBe("start");
+    expect(((toolEvents[1].metadata as Record<string, unknown>).tool as Record<string, unknown>).phase).toBe("end");
+  });
+
+  it("streams reasoning chunks/end markers in status metadata", async () => {
+    const { handler } = setupStreaming([
+      { type: "reasoning", text: "Thinking about approach..." },
+      { type: "reasoning", ended: true },
+      { text: "Final answer", kind: "final" },
+    ]);
+    const req = createMockRequest("POST", {
+      ...validA2aRequest(),
+      method: "message/stream",
+    });
+    const res = createMockResponse();
+
+    await handler(req, res);
+
+    const events = parseChunks(res) as Array<Record<string, unknown>>;
+    const reasoningEvents = events.filter(
+      (e) =>
+        e.kind === "status-update" &&
+        ((e.metadata as Record<string, unknown> | undefined)?.stream_event_type === "reasoning"),
+    );
+
+    expect(reasoningEvents.length).toBe(2);
+    const firstReasoning = (reasoningEvents[0].metadata as Record<string, unknown>).reasoning as Record<string, unknown>;
+    expect(firstReasoning.text).toBe("Thinking about approach...");
+    expect(firstReasoning.ended).toBe(false);
+    const lastReasoning = (reasoningEvents[1].metadata as Record<string, unknown>).reasoning as Record<string, unknown>;
+    expect(lastReasoning.ended).toBe(true);
   });
 
   it("handles errors with failed status-update", async () => {

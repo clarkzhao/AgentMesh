@@ -13,10 +13,10 @@ export interface DispatchParams {
   signal?: AbortSignal;
 }
 
-export interface StreamChunk {
-  text: string;
-  isFinal: boolean;
-}
+export type StreamEvent =
+  | { type: "text"; text: string; isFinal: boolean }
+  | { type: "tool"; name?: string; phase?: string }
+  | { type: "reasoning"; text?: string; ended?: boolean };
 
 export class AbortError extends Error {
   constructor(message = "Dispatch aborted") {
@@ -126,7 +126,7 @@ export async function dispatchToAgent(params: DispatchParams): Promise<string> {
   return Promise.race(promises);
 }
 
-export async function* dispatchToAgentStreaming(params: DispatchParams): AsyncGenerator<StreamChunk> {
+export async function* dispatchToAgentStreaming(params: DispatchParams): AsyncGenerator<StreamEvent> {
   const { api, config, signal } = params;
   const reply = validateReplyApi(api);
 
@@ -134,11 +134,11 @@ export async function* dispatchToAgentStreaming(params: DispatchParams): AsyncGe
   const ctx = reply.finalizeInboundContext(rawCtx);
 
   // AsyncQueue for delivering chunks from the callback to the generator
-  const queue: Array<StreamChunk | Error> = [];
+  const queue: Array<StreamEvent | Error> = [];
   let resolve: (() => void) | null = null;
   let done = false;
 
-  function enqueue(item: StreamChunk | Error) {
+  function enqueue(item: StreamEvent | Error) {
     queue.push(item);
     if (resolve) {
       resolve();
@@ -146,7 +146,7 @@ export async function* dispatchToAgentStreaming(params: DispatchParams): AsyncGe
     }
   }
 
-  async function dequeue(): Promise<StreamChunk | Error> {
+  async function dequeue(): Promise<StreamEvent | Error> {
     while (queue.length === 0) {
       await new Promise<void>((r) => { resolve = r; });
     }
@@ -159,12 +159,27 @@ export async function* dispatchToAgentStreaming(params: DispatchParams): AsyncGe
   ) => {
     if (done) return;
     if (payload.text) {
-      enqueue({ text: payload.text, isFinal: info.kind === "final" });
+      enqueue({ type: "text", text: payload.text, isFinal: info.kind === "final" });
     }
   };
 
   const { dispatcher, replyOptions, markDispatchIdle } =
     reply.createReplyDispatcherWithTyping({ deliver });
+  const streamReplyOptions = {
+    ...replyOptions,
+    onToolStart: async (payload: { name?: string; phase?: string }) => {
+      if (done) return;
+      enqueue({ type: "tool", name: payload.name, phase: payload.phase });
+    },
+    onReasoningStream: async (payload: { text?: string }) => {
+      if (done || payload.text === undefined) return;
+      enqueue({ type: "reasoning", text: payload.text });
+    },
+    onReasoningEnd: async () => {
+      if (done) return;
+      enqueue({ type: "reasoning", ended: true });
+    },
+  };
 
   const cfg = api.runtime.config.loadConfig();
   const effectiveTimeout = getEffectiveTimeout(config);
@@ -172,7 +187,7 @@ export async function* dispatchToAgentStreaming(params: DispatchParams): AsyncGe
   // Start dispatch in background
   const dispatchPromise = (async () => {
     try {
-      await reply.dispatchReplyFromConfig({ ctx, cfg, dispatcher, replyOptions });
+      await reply.dispatchReplyFromConfig({ ctx, cfg, dispatcher, replyOptions: streamReplyOptions });
       dispatcher.markComplete();
       await dispatcher.waitForIdle();
       markDispatchIdle();
@@ -206,7 +221,7 @@ export async function* dispatchToAgentStreaming(params: DispatchParams): AsyncGe
         throw item;
       }
       yield item;
-      if (item.isFinal) {
+      if (item.type === "text" && item.isFinal) {
         done = true;
       }
     }

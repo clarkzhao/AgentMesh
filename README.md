@@ -7,7 +7,7 @@ Agent discovery mesh for A2A agents. Enables agents across frameworks (OpenClaw,
 - **LAN agent discovery** via mDNS (`_a2a._tcp`) — agents on the same network find each other automatically
 - **Static discovery** via `bootstrap.json` for known agent endpoints
 - **A2A protocol bridge for OpenClaw** — serves AgentCard, handles `message/send`, `message/stream`, `tasks/get`, `tasks/cancel`
-- **SSE streaming** — real-time streamed responses via `message/stream` (Server-Sent Events)
+- **SSE streaming** — real-time responses via `message/stream` (text, tool status, reasoning metadata)
 - **Multi-agent routing** — route A2A requests to different OpenClaw agent identities based on `skill_id`
 - **Non-text message parts** — file and data parts accepted (converted to text representations for the agent)
 - **Task cancellation** — abort in-flight tasks via `tasks/cancel`
@@ -274,7 +274,7 @@ Exposes any OpenClaw agent as a standard A2A agent:
 
 - Serves `GET /.well-known/agent-card.json`
 - Accepts `POST /a2a` (A2A JSON-RPC: `message/send`, `message/stream`, `tasks/get`, `tasks/cancel`)
-- SSE streaming with status-update and artifact-update events
+- SSE streaming with status-update and artifact-update events (including tool/reasoning metadata updates)
 - Multi-agent routing via `skill_id` in message metadata
 - Announces via mDNS (`_a2a._tcp`)
 - Token-based auth (auto-generated or explicit)
@@ -340,6 +340,6 @@ make check-discovery-py      # Lint + typecheck Python SDK
 2. Python script runs
    → Discovers agent via mDNS (or uses --url to skip)
    → Fetches AgentCard
-   → Sends message/send (or message/stream with --stream) via a2a-sdk Client
+   → Sends message/send or message/stream via a2a-sdk Client
    → Prints the result (streaming: prints events as they arrive)
 ```

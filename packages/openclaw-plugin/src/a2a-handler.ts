@@ -24,7 +24,7 @@ import {
   JsonParseError,
   TimeoutError,
 } from "./utils.js";
-import { dispatchToAgent, dispatchToAgentStreaming, AbortError } from "./dispatch.js";
+import { dispatchToAgent, dispatchToAgentStreaming, AbortError, type StreamEvent } from "./dispatch.js";
 import { TaskStore } from "./task-store.js";
 
 export function createA2aHandler(opts: { api: OpenClawPluginApi; config: PluginConfig }) {
@@ -151,6 +151,21 @@ function partKind(part: A2aPart | Record<string, unknown>): string {
 /** Create a text part */
 function textPart(text: string): A2aTextPart {
   return { kind: "text", text };
+}
+
+function streamMetadata(
+  event: Extract<StreamEvent, { type: "tool" | "reasoning" }>,
+): Record<string, unknown> {
+  if (event.type === "tool") {
+    return {
+      stream_event_type: "tool",
+      tool: { name: event.name, phase: event.phase },
+    };
+  }
+  return {
+    stream_event_type: "reasoning",
+    reasoning: { text: event.text, ended: event.ended ?? false },
+  };
 }
 
 /** Parse and validate send params (shared between sync and streaming handlers) */
@@ -414,7 +429,7 @@ async function handleMessageStream(
   try {
     const allChunks: string[] = [];
 
-    for await (const chunk of dispatchToAgentStreaming({
+    for await (const event of dispatchToAgentStreaming({
       api,
       config,
       message,
@@ -425,10 +440,20 @@ async function handleMessageStream(
     })) {
       if (clientDisconnected) break;
 
-      allChunks.push(chunk.text);
+      if (event.type === "tool" || event.type === "reasoning") {
+        const statusEvent: A2aTaskStatusUpdateEvent = {
+          kind: "status-update",
+          task_id: taskId,
+          context_id: contextId,
+          status: { state: "working" },
+          final: false,
+          metadata: streamMetadata(event),
+        };
+        sendSseEvent(res, rpc.id, statusEvent);
+      } else if (!event.isFinal) {
+        allChunks.push(event.text);
 
-      if (!chunk.isFinal) {
-        // Intermediate chunk: status-update with working state
+        // Intermediate text chunk: status-update with working state
         const statusEvent: A2aTaskStatusUpdateEvent = {
           kind: "status-update",
           task_id: taskId,
@@ -437,13 +462,15 @@ async function handleMessageStream(
             state: "working",
             message: {
               role: "agent",
-              parts: [textPart(chunk.text)] as A2aPart[],
+              parts: [textPart(event.text)] as A2aPart[],
             },
           },
           final: false,
         };
         sendSseEvent(res, rpc.id, statusEvent);
       } else {
+        allChunks.push(event.text);
+
         // Final chunk
         const fullText = allChunks.join("");
         const agentParts = [textPart(fullText)];
