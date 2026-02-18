@@ -262,6 +262,7 @@ async function handleMessageSend(
       context_id: contextId,
     };
     const agentParts = [textPart(replyText)];
+    const artifactId = crypto.randomUUID();
     const agentMessage: A2aMessage = {
       message_id: crypto.randomUUID(),
       kind: "message",
@@ -275,7 +276,11 @@ async function handleMessageSend(
       kind: "task",
       context_id: contextId,
       status: { state: "completed" },
-      artifacts: [{ name: "response", parts: agentParts as A2aPart[] }],
+      artifacts: [{
+        artifact_id: artifactId,
+        name: "response",
+        parts: agentParts as A2aPart[],
+      }],
       history: [userMessage, agentMessage],
     };
 
@@ -438,6 +443,7 @@ async function handleMessageStream(
         // Final chunk
         const fullText = allChunks.join("");
         const agentParts = [textPart(fullText)];
+        const artifactId = crypto.randomUUID();
 
         const userMessage: A2aMessage = {
           message_id: messageId,
@@ -459,7 +465,11 @@ async function handleMessageStream(
           kind: "task",
           context_id: contextId,
           status: { state: "completed" },
-          artifacts: [{ name: "response", parts: agentParts as A2aPart[] }],
+          artifacts: [{
+            artifact_id: artifactId,
+            name: "response",
+            parts: agentParts as A2aPart[],
+          }],
           history: [userMessage, agentMessage],
         };
 
@@ -480,7 +490,11 @@ async function handleMessageStream(
           kind: "artifact-update",
           task_id: taskId,
           context_id: contextId,
-          artifact: { name: "response", parts: agentParts as A2aPart[] },
+          artifact: {
+            artifact_id: artifactId,
+            name: "response",
+            parts: agentParts as A2aPart[],
+          },
           last_chunk: true,
         };
         sendSseEvent(res, artifactEvent);

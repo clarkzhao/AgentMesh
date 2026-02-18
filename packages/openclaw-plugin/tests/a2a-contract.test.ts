@@ -37,6 +37,7 @@ describe("a2a-contract", () => {
     expect(result.status.state).toBe("completed");
     expect(Array.isArray(result.artifacts)).toBe(true);
     expect(result.artifacts.length).toBeGreaterThan(0);
+    expect(result.artifacts[0].artifact_id).toBeDefined();
     expect(result.artifacts[0].parts[0].kind).toBe("text");
     expect(typeof result.artifacts[0].parts[0].text).toBe("string");
   });
