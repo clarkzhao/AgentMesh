@@ -5,6 +5,7 @@ import {
   createMockRequest,
   createMockResponse,
   validA2aRequest,
+  validLegacyA2aRequest,
   defaultPluginConfig,
 } from "./helpers.js";
 import type { PluginConfig } from "../src/types.js";
@@ -18,7 +19,7 @@ function setup(configOverrides: Partial<PluginConfig> = {}, replyText = "Hello b
 
 describe("a2a-handler", () => {
   describe("JSON-RPC parsing", () => {
-    it("handles valid tasks/send request", async () => {
+    it("handles valid message/send request", async () => {
       const { handler } = setup({ auth: { token: null, allowUnauthenticated: true } });
       const req = createMockRequest("POST", validA2aRequest());
       const res = createMockResponse();
@@ -32,6 +33,19 @@ describe("a2a-handler", () => {
       expect(body.result.id).toBe("task-1");
       expect(body.result.status.state).toBe("completed");
       expect(body.result.artifacts).toHaveLength(1);
+      expect(body.result.artifacts[0].parts[0].text).toBe("Hello back!");
+    });
+
+    it("handles valid tasks/send request (legacy)", async () => {
+      const { handler } = setup({ auth: { token: null, allowUnauthenticated: true } });
+      const req = createMockRequest("POST", validLegacyA2aRequest());
+      const res = createMockResponse();
+
+      await handler(req, res);
+
+      expect(res._status).toBe(200);
+      const body = JSON.parse(res._body);
+      expect(body.result.status.state).toBe("completed");
       expect(body.result.artifacts[0].parts[0].text).toBe("Hello back!");
     });
 
@@ -49,7 +63,7 @@ describe("a2a-handler", () => {
 
     it("rejects missing jsonrpc field", async () => {
       const { handler } = setup({ auth: { token: null, allowUnauthenticated: true } });
-      const req = createMockRequest("POST", { id: "1", method: "tasks/send" });
+      const req = createMockRequest("POST", { id: "1", method: "message/send" });
       const res = createMockResponse();
 
       await handler(req, res);
@@ -59,13 +73,13 @@ describe("a2a-handler", () => {
       expect(body.error.code).toBe(-32600);
     });
 
-    it("rejects missing params.id", async () => {
+    it("rejects missing params.message", async () => {
       const { handler } = setup({ auth: { token: null, allowUnauthenticated: true } });
       const req = createMockRequest("POST", {
         jsonrpc: "2.0",
         id: "1",
-        method: "tasks/send",
-        params: { message: { role: "user", parts: [{ type: "text", text: "Hi" }] } },
+        method: "message/send",
+        params: {},
       });
       const res = createMockResponse();
 
@@ -92,7 +106,7 @@ describe("a2a-handler", () => {
       expect(body.error.message).toBe("Method not found");
     });
 
-    it("returns -32601 for tasks/cancel", async () => {
+    it("returns -32601 for tasks/cancel (not yet implemented)", async () => {
       const { handler } = setup({ auth: { token: null, allowUnauthenticated: true } });
       const req = createMockRequest("POST", {
         jsonrpc: "2.0",
@@ -125,14 +139,14 @@ describe("a2a-handler", () => {
       const req = createMockRequest("POST", {
         jsonrpc: "2.0",
         id: "1",
-        method: "tasks/send",
+        method: "message/send",
         params: {
           id: "task-1",
           message: {
             role: "user",
             parts: [
-              { type: "text", text: "Hello" },
-              { type: "image", data: "base64..." },
+              { kind: "text", text: "Hello" },
+              { kind: "image", data: "base64..." },
             ],
           },
         },
@@ -155,12 +169,12 @@ describe("a2a-handler", () => {
       const req = createMockRequest("POST", {
         jsonrpc: "2.0",
         id: "1",
-        method: "tasks/send",
+        method: "message/send",
         params: {
           id: "task-1",
           message: {
             role: "user",
-            parts: [{ type: "image", data: "base64..." }],
+            parts: [{ kind: "data", data: { key: "value" } }],
           },
         },
       });
@@ -171,6 +185,91 @@ describe("a2a-handler", () => {
       const body = JSON.parse(res._body);
       expect(body.error.code).toBe(-32602);
       expect(body.error.message).toContain("no text parts");
+    });
+  });
+
+  describe("backward compat — legacy `type` discriminator", () => {
+    it("accepts parts with `type` discriminator via tasks/send", async () => {
+      const { handler } = setup({ auth: { token: null, allowUnauthenticated: true } });
+      const req = createMockRequest("POST", validLegacyA2aRequest());
+      const res = createMockResponse();
+
+      await handler(req, res);
+
+      const body = JSON.parse(res._body);
+      expect(body.result.status.state).toBe("completed");
+    });
+
+    it("accepts parts with `type` discriminator via message/send", async () => {
+      const { handler } = setup({ auth: { token: null, allowUnauthenticated: true } });
+      const req = createMockRequest("POST", {
+        jsonrpc: "2.0",
+        id: "req-1",
+        method: "message/send",
+        params: {
+          id: "task-1",
+          message: {
+            role: "user",
+            parts: [{ type: "text", text: "Hello via legacy type" }],
+          },
+        },
+      });
+      const res = createMockResponse();
+
+      await handler(req, res);
+
+      const body = JSON.parse(res._body);
+      expect(body.result.status.state).toBe("completed");
+    });
+
+    it("resolves sessionId from legacy params", async () => {
+      let capturedCtx: { SessionKey: string } | null = null;
+      const api = createMockApiWithReply("ok");
+      api.runtime.channel.reply.finalizeInboundContext = (ctx: unknown) => {
+        capturedCtx = ctx as { SessionKey: string };
+        return ctx;
+      };
+      const config = defaultPluginConfig({
+        auth: { token: null, allowUnauthenticated: true },
+        session: {
+          strategy: "per-conversation",
+          prefix: "a2a",
+          agentId: "main",
+          timeoutMs: 5000,
+        },
+      });
+      const handler = createA2aHandler({ api, config });
+
+      const req = createMockRequest("POST", {
+        jsonrpc: "2.0",
+        id: "req-1",
+        method: "tasks/send",
+        params: {
+          id: "task-1",
+          sessionId: "legacy-session-42",
+          message: {
+            role: "user",
+            parts: [{ type: "text", text: "Hi" }],
+          },
+        },
+      });
+      const res = createMockResponse();
+      await handler(req, res);
+
+      expect(capturedCtx?.SessionKey).toBe("a2a:main:legacy-session-42");
+    });
+
+    it("emits dual-format output with both kind and type", async () => {
+      const { handler } = setup({ auth: { token: null, allowUnauthenticated: true } });
+      const req = createMockRequest("POST", validA2aRequest());
+      const res = createMockResponse();
+
+      await handler(req, res);
+
+      const body = JSON.parse(res._body);
+      const agentPart = body.result.artifacts[0].parts[0];
+      expect(agentPart.kind).toBe("text");
+      expect(agentPart.type).toBe("text");
     });
   });
 
@@ -226,7 +325,7 @@ describe("a2a-handler", () => {
     it("generates per-task session key", async () => {
       let capturedCtx: { SessionKey: string } | null = null;
       const api = createMockApiWithReply("ok");
-      api.runtime.channel.reply.finalizeInboundContext = (ctx) => {
+      api.runtime.channel.reply.finalizeInboundContext = (ctx: unknown) => {
         capturedCtx = ctx as { SessionKey: string };
         return ctx;
       };
@@ -243,10 +342,47 @@ describe("a2a-handler", () => {
       expect(capturedCtx?.SessionKey).toBe("a2a:main:task-1");
     });
 
-    it("generates per-conversation session key with sessionId", async () => {
+    it("generates per-conversation session key with context_id", async () => {
       let capturedCtx: { SessionKey: string } | null = null;
       const api = createMockApiWithReply("ok");
-      api.runtime.channel.reply.finalizeInboundContext = (ctx) => {
+      api.runtime.channel.reply.finalizeInboundContext = (ctx: unknown) => {
+        capturedCtx = ctx as { SessionKey: string };
+        return ctx;
+      };
+      const config = defaultPluginConfig({
+        auth: { token: null, allowUnauthenticated: true },
+        session: {
+          strategy: "per-conversation",
+          prefix: "a2a",
+          agentId: "main",
+          timeoutMs: 5000,
+        },
+      });
+      const handler = createA2aHandler({ api, config });
+
+      const req = createMockRequest("POST", {
+        jsonrpc: "2.0",
+        id: "req-1",
+        method: "message/send",
+        params: {
+          id: "task-1",
+          message: {
+            role: "user",
+            parts: [{ kind: "text", text: "Hello" }],
+            context_id: "conv-42",
+          },
+        },
+      });
+      const res = createMockResponse();
+      await handler(req, res);
+
+      expect(capturedCtx?.SessionKey).toBe("a2a:main:conv-42");
+    });
+
+    it("generates per-conversation key with legacy sessionId", async () => {
+      let capturedCtx: { SessionKey: string } | null = null;
+      const api = createMockApiWithReply("ok");
+      api.runtime.channel.reply.finalizeInboundContext = (ctx: unknown) => {
         capturedCtx = ctx as { SessionKey: string };
         return ctx;
       };
@@ -274,10 +410,10 @@ describe("a2a-handler", () => {
       expect(capturedCtx?.SessionKey).toBe("a2a:main:conv-42");
     });
 
-    it("generates per-conversation key falling back to taskId when no sessionId", async () => {
+    it("generates per-conversation key falling back to taskId when no context", async () => {
       let capturedCtx: { SessionKey: string } | null = null;
       const api = createMockApiWithReply("ok");
-      api.runtime.channel.reply.finalizeInboundContext = (ctx) => {
+      api.runtime.channel.reply.finalizeInboundContext = (ctx: unknown) => {
         capturedCtx = ctx as { SessionKey: string };
         return ctx;
       };
@@ -302,7 +438,7 @@ describe("a2a-handler", () => {
     it("generates shared session key", async () => {
       let capturedCtx: { SessionKey: string } | null = null;
       const api = createMockApiWithReply("ok");
-      api.runtime.channel.reply.finalizeInboundContext = (ctx) => {
+      api.runtime.channel.reply.finalizeInboundContext = (ctx: unknown) => {
         capturedCtx = ctx as { SessionKey: string };
         return ctx;
       };
@@ -354,7 +490,7 @@ describe("a2a-handler", () => {
       expect(result.history).toHaveLength(2);
       expect(result.history[0].role).toBe("user");
       expect(result.history[1].role).toBe("agent");
-      expect(result.history[1].parts[0].type).toBe("text");
+      expect(result.history[1].parts[0].kind).toBe("text");
     });
 
     it("includes artifacts with text parts", async () => {
@@ -367,7 +503,32 @@ describe("a2a-handler", () => {
       const body = JSON.parse(res._body);
       expect(body.result.artifacts).toHaveLength(1);
       expect(body.result.artifacts[0].name).toBe("response");
-      expect(body.result.artifacts[0].parts[0].type).toBe("text");
+      expect(body.result.artifacts[0].parts[0].kind).toBe("text");
+    });
+
+    it("includes kind:'task' and context_id in response", async () => {
+      const { handler } = setup({ auth: { token: null, allowUnauthenticated: true } });
+      const req = createMockRequest("POST", validA2aRequest());
+      const res = createMockResponse();
+
+      await handler(req, res);
+
+      const body = JSON.parse(res._body);
+      expect(body.result.kind).toBe("task");
+    });
+
+    it("includes message_id and kind:'message' in history", async () => {
+      const { handler } = setup({ auth: { token: null, allowUnauthenticated: true } });
+      const req = createMockRequest("POST", validA2aRequest());
+      const res = createMockResponse();
+
+      await handler(req, res);
+
+      const body = JSON.parse(res._body);
+      expect(body.result.history[0].kind).toBe("message");
+      expect(body.result.history[0].message_id).toBeDefined();
+      expect(body.result.history[1].kind).toBe("message");
+      expect(body.result.history[1].message_id).toBeDefined();
     });
   });
 });

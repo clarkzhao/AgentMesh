@@ -21,10 +21,18 @@ const plugin: {
     const config = resolvePluginConfig(api.pluginConfig ?? {}, api);
     if (!config.enabled) return;
 
-    // Register /.well-known/agent.json (public, no auth required)
+    const agentCardHandler = createAgentCardHandler(config);
+
+    // Register /.well-known/agent-card.json (new spec path, primary)
+    api.registerHttpRoute({
+      path: "/.well-known/agent-card.json",
+      handler: agentCardHandler,
+    });
+
+    // Register /.well-known/agent.json (legacy path, kept for backward compat)
     api.registerHttpRoute({
       path: "/.well-known/agent.json",
-      handler: createAgentCardHandler(config),
+      handler: agentCardHandler,
     });
 
     // Register /a2a endpoint (token-gated)

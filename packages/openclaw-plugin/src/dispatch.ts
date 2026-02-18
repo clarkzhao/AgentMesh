@@ -9,10 +9,12 @@ export interface DispatchParams {
   message: string;
   sessionKey: string;
   taskId: string;
+  agentId?: string;
 }
 
 export async function dispatchToAgent(params: DispatchParams): Promise<string> {
-  const { api, config, message, sessionKey, taskId } = params;
+  const { api, config, message, sessionKey, taskId, agentId } = params;
+  const effectiveAgentId = agentId ?? config.session.agentId;
 
   // Validate runtime API exists
   const reply = api.runtime?.channel?.reply;
@@ -34,7 +36,7 @@ export async function dispatchToAgent(params: DispatchParams): Promise<string> {
     Body: message,
     CommandBody: message,
     From: "a2a:remote",
-    To: `agent:${config.session.agentId}`,
+    To: `agent:${effectiveAgentId}`,
     SessionKey: sessionKey,
     ChatType: "direct" as const,
     CommandAuthorized: false,

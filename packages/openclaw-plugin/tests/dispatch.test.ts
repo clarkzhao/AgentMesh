@@ -1,15 +1,25 @@
 import { describe, it, expect } from "vitest";
 import { dispatchToAgent } from "../src/dispatch.js";
 import { createMockApiWithReply, defaultPluginConfig } from "./helpers.js";
-import type { MsgContext } from "../src/types.js";
+
+interface CapturedCtx {
+  Body: string;
+  SessionKey: string;
+  ChatType: string;
+  CommandAuthorized: boolean;
+  MessageSid: string;
+  Provider: string;
+  Surface: string;
+  To: string;
+}
 
 describe("dispatch", () => {
   it("builds MsgContext correctly", async () => {
-    let capturedCtx: MsgContext | null = null;
+    let capturedCtx: CapturedCtx | null = null;
 
     const api = createMockApiWithReply("ok");
-    api.runtime.channel.reply.finalizeInboundContext = (ctx) => {
-      capturedCtx = ctx;
+    api.runtime.channel.reply.finalizeInboundContext = (ctx: unknown) => {
+      capturedCtx = ctx as CapturedCtx;
       return ctx;
     };
 
@@ -29,6 +39,47 @@ describe("dispatch", () => {
     expect(capturedCtx!.MessageSid).toBe("task-123");
     expect(capturedCtx!.Provider).toBe("a2a");
     expect(capturedCtx!.Surface).toBe("a2a");
+  });
+
+  it("uses explicit agentId when provided", async () => {
+    let capturedCtx: CapturedCtx | null = null;
+
+    const api = createMockApiWithReply("ok");
+    api.runtime.channel.reply.finalizeInboundContext = (ctx: unknown) => {
+      capturedCtx = ctx as CapturedCtx;
+      return ctx;
+    };
+
+    await dispatchToAgent({
+      api,
+      config: defaultPluginConfig(),
+      message: "Hello",
+      sessionKey: "a2a:support:task-123",
+      taskId: "task-123",
+      agentId: "support",
+    });
+
+    expect(capturedCtx!.To).toBe("agent:support");
+  });
+
+  it("falls back to config agentId when none provided", async () => {
+    let capturedCtx: CapturedCtx | null = null;
+
+    const api = createMockApiWithReply("ok");
+    api.runtime.channel.reply.finalizeInboundContext = (ctx: unknown) => {
+      capturedCtx = ctx as CapturedCtx;
+      return ctx;
+    };
+
+    await dispatchToAgent({
+      api,
+      config: defaultPluginConfig(),
+      message: "Hello",
+      sessionKey: "a2a:main:task-123",
+      taskId: "task-123",
+    });
+
+    expect(capturedCtx!.To).toBe("agent:main");
   });
 
   it("returns reply text", async () => {

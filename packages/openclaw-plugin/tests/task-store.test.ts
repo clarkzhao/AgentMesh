@@ -11,7 +11,7 @@ describe("task-store", () => {
     store.set("task-1", {
       id: "task-1",
       status: { state: "completed" },
-      artifacts: [{ name: "response", parts: [{ type: "text", text: "Hello" }] }],
+      artifacts: [{ name: "response", parts: [{ kind: "text", text: "Hello" }] }],
     });
 
     const task = store.get("task-1");
@@ -79,5 +79,32 @@ describe("task-store", () => {
 
     const task = store.get("task-1");
     expect(task!.status.state).toBe("completed");
+  });
+
+  it("enforces terminal state immutability — canceled cannot be overwritten", () => {
+    const store = new TaskStore();
+    store.set("task-1", { id: "task-1", status: { state: "canceled" } });
+    store.set("task-1", { id: "task-1", status: { state: "completed" } });
+
+    const task = store.get("task-1");
+    expect(task!.status.state).toBe("canceled");
+  });
+
+  it("enforces terminal state immutability — rejected cannot be overwritten", () => {
+    const store = new TaskStore();
+    store.set("task-1", { id: "task-1", status: { state: "rejected" } });
+    store.set("task-1", { id: "task-1", status: { state: "completed" } });
+
+    const task = store.get("task-1");
+    expect(task!.status.state).toBe("rejected");
+  });
+
+  it("isTerminal returns true for canceled and rejected", () => {
+    const store = new TaskStore();
+    store.set("task-c", { id: "task-c", status: { state: "canceled" } });
+    store.set("task-r", { id: "task-r", status: { state: "rejected" } });
+
+    expect(store.isTerminal("task-c")).toBe(true);
+    expect(store.isTerminal("task-r")).toBe(true);
   });
 });

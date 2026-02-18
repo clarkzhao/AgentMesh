@@ -1,7 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as crypto from "node:crypto";
-import type { OpenClawPluginApi, PluginConfig } from "./types.js";
+import type { OpenClawPluginApi, PluginConfig, AgentIdentity } from "./types.js";
 
 export function resolvePluginConfig(
   raw: Record<string, unknown>,
@@ -37,6 +37,9 @@ export function resolvePluginConfig(
       ? rawSession.timeoutMs
       : 120_000;
 
+  // Build agents map
+  const agents = resolveAgents(raw, skills, agentId);
+
   return {
     enabled,
     agentName,
@@ -46,6 +49,7 @@ export function resolvePluginConfig(
     mdns,
     auth: { token, allowUnauthenticated },
     session: { strategy, prefix, agentId, timeoutMs },
+    agents,
   };
 }
 
@@ -153,4 +157,29 @@ function resolveAuthToken(
   const fingerprint = newToken.slice(0, 8);
   api.logger.info(`Auto-generated auth token: ${fingerprint}...`);
   return newToken;
+}
+
+function resolveAgents(
+  raw: Record<string, unknown>,
+  defaultSkills: Array<{ id: string; name: string; description: string; tags?: string[] }>,
+  defaultAgentId: string,
+): Record<string, AgentIdentity> {
+  const rawAgents = raw.agents as Record<string, unknown> | undefined;
+  if (rawAgents && typeof rawAgents === "object" && !Array.isArray(rawAgents)) {
+    const agents: Record<string, AgentIdentity> = {};
+    for (const [key, val] of Object.entries(rawAgents)) {
+      const entry = val as Record<string, unknown>;
+      const agentId = typeof entry.agentId === "string" ? entry.agentId : key;
+      const skills = Array.isArray(entry.skills)
+        ? (entry.skills as Array<{ id: string; name: string; description: string; tags?: string[] }>)
+        : [];
+      agents[key] = { agentId, skills };
+    }
+    return agents;
+  }
+
+  // Legacy single-agent config: create one entry from defaults
+  return {
+    [defaultAgentId]: { agentId: defaultAgentId, skills: defaultSkills },
+  };
 }

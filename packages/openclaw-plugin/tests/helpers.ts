@@ -98,6 +98,35 @@ export function createMockApiWithReply(
   return api;
 }
 
+export function createMockApiWithStreamingReply(
+  chunks: Array<{ text: string; kind: string }>,
+  delay = 0,
+): MockApi {
+  let capturedDeliver: DeliverFn | null = null;
+
+  const api = createMockApi();
+  api.runtime.channel.reply.createReplyDispatcherWithTyping = (opts: { deliver: DeliverFn }) => {
+    capturedDeliver = opts.deliver;
+    return {
+      dispatcher: {
+        markComplete: () => {},
+        waitForIdle: () => Promise.resolve(),
+      },
+      replyOptions: {},
+      markDispatchIdle: () => {},
+    };
+  };
+  api.runtime.channel.reply.dispatchReplyFromConfig = async () => {
+    for (const chunk of chunks) {
+      if (delay > 0) {
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      }
+      await capturedDeliver?.({ text: chunk.text }, { kind: chunk.kind });
+    }
+  };
+  return api;
+}
+
 export function createMockRequest(
   method: string,
   body: unknown,
@@ -125,25 +154,39 @@ export function createMockResponse(): ServerResponse & {
   _status: number;
   _headers: Record<string, string>;
   _body: string;
+  _chunks: string[];
+  _ended: boolean;
 } {
   let status = 200;
   let body = "";
   const headers: Record<string, string> = {};
+  const chunks: string[] = [];
+  let ended = false;
 
   const res = {
     _status: status,
     _headers: headers,
     _body: body,
+    _chunks: chunks,
+    _ended: ended,
     writeHead(code: number, hdrs?: Record<string, string>) {
       res._status = code;
       if (hdrs) Object.assign(res._headers, hdrs);
       return res;
     },
+    write(data: string) {
+      res._chunks.push(data);
+      return true;
+    },
     end(data?: string) {
       if (data) res._body = data;
+      res._ended = true;
     },
     setHeader(name: string, value: string) {
       res._headers[name] = value;
+    },
+    on(_event: string, _handler: Function) {
+      return res;
     },
   };
 
@@ -151,10 +194,30 @@ export function createMockResponse(): ServerResponse & {
     _status: number;
     _headers: Record<string, string>;
     _body: string;
+    _chunks: string[];
+    _ended: boolean;
   };
 }
 
+/** New-format A2A request (a2a-sdk 0.3.x) */
 export function validA2aRequest(overrides: Record<string, unknown> = {}) {
+  return {
+    jsonrpc: "2.0",
+    id: "req-1",
+    method: "message/send",
+    params: {
+      id: "task-1",
+      message: {
+        role: "user",
+        parts: [{ kind: "text", text: "Hello" }],
+      },
+    },
+    ...overrides,
+  };
+}
+
+/** Legacy M1 wire format request */
+export function validLegacyA2aRequest(overrides: Record<string, unknown> = {}) {
   return {
     jsonrpc: "2.0",
     id: "req-1",
@@ -184,6 +247,12 @@ export function defaultPluginConfig(overrides: Partial<PluginConfig> = {}): Plug
       prefix: "a2a",
       agentId: "main",
       timeoutMs: 5000,
+    },
+    agents: {
+      main: {
+        agentId: "main",
+        skills: [{ id: "chat", name: "Chat", description: "General conversation" }],
+      },
     },
     ...overrides,
   };

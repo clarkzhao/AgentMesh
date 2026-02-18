@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { createAgentCardHandler } from "../src/agent-card.js";
+import { createAgentCardHandler, buildAgentCard } from "../src/agent-card.js";
 import { createMockRequest, createMockResponse, defaultPluginConfig } from "./helpers.js";
 
 describe("agent-card", () => {
@@ -18,7 +18,8 @@ describe("agent-card", () => {
     const card = JSON.parse(res._body);
     expect(card.name).toBe("TestAgent");
     expect(card.url).toBe("http://localhost:18789/a2a");
-    expect(card.version).toBeDefined();
+    expect(card.version).toBe("0.2.0");
+    expect(card.protocol_version).toBe("0.3.0");
     expect(card.skills).toHaveLength(1);
   });
 
@@ -67,5 +68,32 @@ describe("agent-card", () => {
     const card = JSON.parse(res._body);
     expect(card.securitySchemes).toBeUndefined();
     expect(card.security).toBeUndefined();
+  });
+
+  it("includes tags on skills", () => {
+    const config = defaultPluginConfig();
+    const card = buildAgentCard(config);
+    expect(card.skills).toHaveLength(1);
+    expect((card.skills as Array<{ tags: string[] }>)[0].tags).toEqual([]);
+  });
+
+  it("merges skills from multiple agent identities", () => {
+    const config = defaultPluginConfig({
+      agents: {
+        main: {
+          agentId: "main",
+          skills: [{ id: "chat", name: "Chat", description: "General conversation" }],
+        },
+        support: {
+          agentId: "support",
+          skills: [{ id: "support", name: "Support", description: "Customer support" }],
+        },
+      },
+    });
+    const card = buildAgentCard(config);
+    expect(card.skills).toHaveLength(2);
+    const ids = (card.skills as Array<{ id: string }>).map((s) => s.id);
+    expect(ids).toContain("chat");
+    expect(ids).toContain("support");
   });
 });

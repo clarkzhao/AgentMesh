@@ -14,21 +14,28 @@ export function createAgentCardHandler(config: PluginConfig) {
   };
 }
 
-function buildAgentCard(config: PluginConfig): Record<string, unknown> {
+export function buildAgentCard(config: PluginConfig): Record<string, unknown> {
+  // Collect skills from all agent identities (multi-agent) or fall back to top-level skills
+  const allSkills = config.agents && Object.keys(config.agents).length > 0
+    ? Object.values(config.agents).flatMap((a) => a.skills)
+    : config.skills;
+
   const card: Record<string, unknown> = {
     name: config.agentName,
     description: config.agentDescription,
     url: `${config.publicBaseUrl}/a2a`,
-    version: "0.1.0",
+    version: "0.2.0",
+    protocol_version: "0.3.0",
     capabilities: {
       streaming: false,
       pushNotifications: false,
       stateTransitionHistory: true,
     },
-    skills: config.skills.map((s) => ({
+    skills: allSkills.map((s) => ({
       id: s.id,
       name: s.name,
       description: s.description,
+      tags: s.tags ?? [],
     })),
     defaultInputModes: ["text"],
     defaultOutputModes: ["text"],
