@@ -28,4 +28,8 @@ class DiscoveryManager:
             resp.raise_for_status()
             data: dict[str, Any] = resp.json()
 
+        # Ensure skills have tags (required by a2a-sdk but not all agents provide it)
+        for skill in data.get("skills", []):
+            skill.setdefault("tags", [])
+
         return AgentCard.model_validate(data)
