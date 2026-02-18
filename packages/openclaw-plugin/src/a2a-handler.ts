@@ -182,25 +182,33 @@ function parseSendParams(rpc: A2aJsonRpcRequest, config: PluginConfig, res: Serv
     return null;
   }
 
-  const textParts: string[] = [];
+  // Extract text from parts — process all part types
+  const textSegments: string[] = [];
   for (const part of params.message.parts) {
     const pk = partKind(part);
     if (pk === "text" && "text" in part) {
-      textParts.push((part as { text: string }).text);
+      textSegments.push((part as { text: string }).text);
+    } else if (pk === "file") {
+      const filePart = part as { file?: { name?: string; uri?: string } };
+      const label = filePart.file?.name ?? filePart.file?.uri ?? "unnamed";
+      textSegments.push(`[File: ${label}]`);
+    } else if (pk === "data") {
+      const dataPart = part as { data?: unknown };
+      textSegments.push(`[Data: ${JSON.stringify(dataPart.data)}]`);
     } else {
-      console.warn(`agentmesh-a2a: Skipping non-text part type: ${pk}`);
+      console.warn(`agentmesh-a2a: Skipping unknown part type: ${pk}`);
     }
   }
 
-  if (textParts.length === 0) {
+  if (textSegments.length === 0) {
     sendJsonRpcError(res, rpc.id, {
       code: -32602,
-      message: "Invalid params: message has no text parts",
+      message: "Invalid params: message has no parts",
     });
     return null;
   }
 
-  const message = textParts.join("\n");
+  const message = textSegments.join("\n");
   const contextId = params.message.context_id ?? params.sessionId ?? taskId;
   const agentId = resolveAgentId(config, params.message);
   const sessionKey = resolveSessionKey(config, agentId, taskId, contextId);

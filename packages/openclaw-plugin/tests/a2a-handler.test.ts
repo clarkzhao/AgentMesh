@@ -133,7 +133,7 @@ describe("a2a-handler", () => {
       expect(res._status).toBe(405);
     });
 
-    it("warns about non-text parts and skips them", async () => {
+    it("warns about unknown part types and skips them", async () => {
       const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
       const { handler } = setup({ auth: { token: null, allowUnauthenticated: true } });
       const req = createMockRequest("POST", {
@@ -146,7 +146,7 @@ describe("a2a-handler", () => {
             role: "user",
             parts: [
               { kind: "text", text: "Hello" },
-              { kind: "image", data: "base64..." },
+              { kind: "unknown-future-type" },
             ],
           },
         },
@@ -156,7 +156,7 @@ describe("a2a-handler", () => {
       await handler(req, res);
 
       expect(warnSpy).toHaveBeenCalledWith(
-        expect.stringContaining("Skipping non-text part type: image"),
+        expect.stringContaining("Skipping unknown part type: unknown-future-type"),
       );
       expect(res._status).toBe(200);
       const body = JSON.parse(res._body);
@@ -164,7 +164,29 @@ describe("a2a-handler", () => {
       warnSpy.mockRestore();
     });
 
-    it("rejects message with no text parts", async () => {
+    it("accepts file-only messages", async () => {
+      const { handler } = setup({ auth: { token: null, allowUnauthenticated: true } });
+      const req = createMockRequest("POST", {
+        jsonrpc: "2.0",
+        id: "1",
+        method: "message/send",
+        params: {
+          id: "task-1",
+          message: {
+            role: "user",
+            parts: [{ kind: "file", file: { uri: "https://example.com/doc.pdf", name: "doc.pdf" } }],
+          },
+        },
+      });
+      const res = createMockResponse();
+
+      await handler(req, res);
+
+      const body = JSON.parse(res._body);
+      expect(body.result.status.state).toBe("completed");
+    });
+
+    it("accepts data-only messages", async () => {
       const { handler } = setup({ auth: { token: null, allowUnauthenticated: true } });
       const req = createMockRequest("POST", {
         jsonrpc: "2.0",
@@ -183,8 +205,120 @@ describe("a2a-handler", () => {
       await handler(req, res);
 
       const body = JSON.parse(res._body);
+      expect(body.result.status.state).toBe("completed");
+    });
+
+    it("rejects message with no parts at all", async () => {
+      const { handler } = setup({ auth: { token: null, allowUnauthenticated: true } });
+      const req = createMockRequest("POST", {
+        jsonrpc: "2.0",
+        id: "1",
+        method: "message/send",
+        params: {
+          id: "task-1",
+          message: {
+            role: "user",
+            parts: [],
+          },
+        },
+      });
+      const res = createMockResponse();
+
+      await handler(req, res);
+
+      const body = JSON.parse(res._body);
       expect(body.error.code).toBe(-32602);
-      expect(body.error.message).toContain("no text parts");
+      expect(body.error.message).toContain("no parts");
+    });
+
+    it("converts file parts to [File: name] in agent message", async () => {
+      let capturedBody = "";
+      const api = createMockApiWithReply("ok");
+      api.runtime.channel.reply.finalizeInboundContext = (ctx: Record<string, unknown>) => {
+        capturedBody = ctx.Body as string;
+        return ctx;
+      };
+      const config = defaultPluginConfig({
+        auth: { token: null, allowUnauthenticated: true },
+      });
+      const handler = createA2aHandler({ api, config });
+
+      const req = createMockRequest("POST", {
+        jsonrpc: "2.0",
+        id: "1",
+        method: "message/send",
+        params: {
+          id: "task-1",
+          message: {
+            role: "user",
+            parts: [
+              { kind: "text", text: "Check this file" },
+              { kind: "file", file: { name: "report.pdf", uri: "https://example.com/report.pdf" } },
+            ],
+          },
+        },
+      });
+      const res = createMockResponse();
+      await handler(req, res);
+
+      expect(capturedBody).toBe("Check this file\n[File: report.pdf]");
+    });
+
+    it("converts data parts to [Data: json] in agent message", async () => {
+      let capturedBody = "";
+      const api = createMockApiWithReply("ok");
+      api.runtime.channel.reply.finalizeInboundContext = (ctx: Record<string, unknown>) => {
+        capturedBody = ctx.Body as string;
+        return ctx;
+      };
+      const config = defaultPluginConfig({
+        auth: { token: null, allowUnauthenticated: true },
+      });
+      const handler = createA2aHandler({ api, config });
+
+      const req = createMockRequest("POST", {
+        jsonrpc: "2.0",
+        id: "1",
+        method: "message/send",
+        params: {
+          id: "task-1",
+          message: {
+            role: "user",
+            parts: [{ kind: "data", data: { count: 42 } }],
+          },
+        },
+      });
+      const res = createMockResponse();
+      await handler(req, res);
+
+      expect(capturedBody).toBe('[Data: {"count":42}]');
+    });
+
+    it("preserves original parts in task history", async () => {
+      const { handler } = setup({ auth: { token: null, allowUnauthenticated: true } });
+      const req = createMockRequest("POST", {
+        jsonrpc: "2.0",
+        id: "1",
+        method: "message/send",
+        params: {
+          id: "task-1",
+          message: {
+            role: "user",
+            parts: [
+              { kind: "text", text: "See attached" },
+              { kind: "file", file: { name: "doc.pdf" } },
+            ],
+          },
+        },
+      });
+      const res = createMockResponse();
+      await handler(req, res);
+
+      const body = JSON.parse(res._body);
+      const userHistory = body.result.history[0];
+      expect(userHistory.parts).toHaveLength(2);
+      expect(userHistory.parts[0].kind).toBe("text");
+      expect(userHistory.parts[1].kind).toBe("file");
     });
   });
 

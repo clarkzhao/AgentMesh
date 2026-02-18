@@ -37,7 +37,7 @@ export function buildAgentCard(config: PluginConfig): Record<string, unknown> {
       description: s.description,
       tags: s.tags ?? [],
     })),
-    defaultInputModes: ["text"],
+    defaultInputModes: ["text", "file", "data"],
     defaultOutputModes: ["text"],
   };
 
