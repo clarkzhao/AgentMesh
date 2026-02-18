@@ -34,11 +34,15 @@ function setupStreaming(
   return { handler, config };
 }
 
-function parseChunks(res: ReturnType<typeof createMockResponse>): unknown[] {
+function parseSseFrames(res: ReturnType<typeof createMockResponse>): Array<Record<string, unknown>> {
   return res._chunks
     .map((c) => c.replace(/^data: /, "").replace(/\n\n$/, ""))
     .filter((c) => c.length > 0)
-    .map((c) => JSON.parse(c));
+    .map((c) => JSON.parse(c) as Record<string, unknown>);
+}
+
+function parseChunks(res: ReturnType<typeof createMockResponse>): unknown[] {
+  return parseSseFrames(res).map((frame) => frame.result ?? frame);
 }
 
 describe("streaming (message/stream)", () => {
@@ -67,6 +71,11 @@ describe("streaming (message/stream)", () => {
     const res = createMockResponse();
 
     await handler(req, res);
+
+    const frames = parseSseFrames(res);
+    expect(frames[0].jsonrpc).toBe("2.0");
+    expect(frames[0].id).toBe("req-1");
+    expect(frames[0].result).toBeDefined();
 
     const events = parseChunks(res);
     expect(events.length).toBeGreaterThanOrEqual(1);

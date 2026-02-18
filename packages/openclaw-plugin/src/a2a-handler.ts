@@ -341,10 +341,14 @@ async function handleMessageSend(
   }
 }
 
-/** Send an SSE event */
-function sendSseEvent(res: ServerResponse, data: unknown): boolean {
+/** Send an SSE event as JSON-RPC response envelope */
+function sendSseEvent(
+  res: ServerResponse,
+  rpcId: string | number,
+  result: unknown,
+): boolean {
   try {
-    res.write(`data: ${JSON.stringify(data)}\n\n`);
+    res.write(`data: ${JSON.stringify({ jsonrpc: "2.0", id: rpcId, result })}\n\n`);
     return true;
   } catch {
     return false;
@@ -395,7 +399,7 @@ async function handleMessageStream(
     status: { state: "working" },
     final: false,
   };
-  sendSseEvent(res, initialEvent);
+  sendSseEvent(res, rpc.id, initialEvent);
 
   const abortController = new AbortController();
   activeDispatches.set(taskId, abortController);
@@ -438,7 +442,7 @@ async function handleMessageStream(
           },
           final: false,
         };
-        sendSseEvent(res, statusEvent);
+        sendSseEvent(res, rpc.id, statusEvent);
       } else {
         // Final chunk
         const fullText = allChunks.join("");
@@ -483,7 +487,7 @@ async function handleMessageStream(
           status: { state: "completed" },
           final: true,
         };
-        sendSseEvent(res, completedEvent);
+        sendSseEvent(res, rpc.id, completedEvent);
 
         // Send artifact-update
         const artifactEvent: A2aTaskArtifactUpdateEvent = {
@@ -497,7 +501,7 @@ async function handleMessageStream(
           },
           last_chunk: true,
         };
-        sendSseEvent(res, artifactEvent);
+        sendSseEvent(res, rpc.id, artifactEvent);
       }
     }
   } catch (err) {
@@ -523,7 +527,7 @@ async function handleMessageStream(
         status: { state: "canceled" },
         final: true,
       };
-      sendSseEvent(res, cancelEvent);
+      sendSseEvent(res, rpc.id, cancelEvent);
     } else {
       const errorMsg = err instanceof Error ? err.message : String(err);
       taskStore.set(taskId, {
@@ -540,7 +544,7 @@ async function handleMessageStream(
         status: { state: "failed", error: errorMsg },
         final: true,
       };
-      sendSseEvent(res, failedEvent);
+      sendSseEvent(res, rpc.id, failedEvent);
     }
   } finally {
     activeDispatches.delete(taskId);

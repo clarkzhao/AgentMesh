@@ -4,7 +4,6 @@ AgentMesh demo: discover an A2A agent via mDNS and send a message.
 Usage:
     uv run python examples/py-agent/main.py "Hello from AgentMesh!"
     uv run python examples/py-agent/main.py --token my-secret "What is 2+2?"
-    uv run python examples/py-agent/main.py --stream "Tell me a story"
 """
 
 from __future__ import annotations
@@ -28,7 +27,6 @@ async def main() -> None:
     parser.add_argument("--token", default=os.environ.get("AGENTMESH_TOKEN", ""))
     parser.add_argument("--timeout", type=float, default=10.0, help="mDNS discovery timeout")
     parser.add_argument("--url", default="", help="Skip mDNS, use this AgentCard URL directly")
-    parser.add_argument("--stream", action="store_true", help="Use SSE streaming via message/stream")
     args = parser.parse_args()
 
     # Step 1: Discover agent
@@ -61,7 +59,7 @@ async def main() -> None:
         timeout=120.0,
     )
     client_config = ClientConfig(
-        streaming=args.stream,
+        streaming=True,
         httpx_client=httpx_client,
     )
     client = await ClientFactory.connect(
