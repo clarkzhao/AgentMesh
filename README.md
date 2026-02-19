@@ -6,17 +6,18 @@ Agent discovery mesh for A2A agents. Enables agents across frameworks (OpenClaw,
 
 ## Features
 
-- **LAN agent discovery** via mDNS (`_a2a._tcp`) — agents on the same network find each other automatically
-- **Static discovery** via `bootstrap.json` for known agent endpoints
-- **CLI toolchain** — `agentmesh discover`, `run`, `trace` for the full agent interaction loop
-- **Control plane daemon** (`agentmeshd`) — event storage (JSONL + SQLite), HTTP API
-- **A2A protocol bridge for OpenClaw** — serves AgentCard, handles `message/send`, `message/stream`, `tasks/get`, `tasks/cancel`
-- **SSE streaming** — real-time responses via `message/stream` (text, tool status, reasoning metadata)
-- **Multi-agent routing** — route A2A requests to different OpenClaw agent identities based on `skill_id`
-- **Bearer token authentication** — auto-generated or explicit, with auto-detection from OpenClaw config
-- **Session strategies** — `per-task`, `per-conversation`, `shared`
-- **Python discovery SDK** (`agentmesh-discovery`) — mDNS + static discovery using official `a2a-sdk` types
-- **A2A spec v0.3 aligned** — `kind` discriminator, `context_id`, `message_id`, 9-state task lifecycle
+| Feature | Description | Package |
+|---|---|---|
+| mDNS discovery | Auto-discover agents on LAN via `_a2a._tcp` | `discovery-py` (Python), `openclaw-plugin` (TS) |
+| Static discovery | Known endpoints via `bootstrap.json` | `discovery-py` (Python) |
+| CLI toolchain | `discover`, `run`, `trace` — full agent interaction loop | `agentmesh-cli` (Python) |
+| Control plane | Event storage (JSONL + SQLite), HTTP API, daemon management | `agentmeshd` (Python) |
+| A2A bridge | AgentCard, `message/send`, `message/stream`, `tasks/get`, `tasks/cancel` | `openclaw-plugin` (TS) |
+| SSE streaming | Real-time text, tool status, reasoning metadata | `openclaw-plugin` (TS) |
+| Multi-agent routing | Route by `skill_id` to different agent identities | `openclaw-plugin` (TS) |
+| Token auth | Auto-generated or explicit; CLI auto-detects from config | `openclaw-plugin` (TS), `agentmesh-cli` (Python) |
+| Session strategies | `per-task`, `per-conversation`, `shared` | `openclaw-plugin` (TS) |
+| A2A v0.3 aligned | `kind` discriminator, `context_id`, `message_id`, 9-state lifecycle | All |
 
 **Not yet supported:** WAN / internet discovery (LAN only — no registry server yet)
 

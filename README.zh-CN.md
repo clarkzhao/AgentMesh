@@ -6,17 +6,18 @@ AgentMesh 是一个面向 A2A Agent 的发现与互联层。它让不同框架�
 
 ## 功能
 
-- **局域网自动发现** — 基于 mDNS（`_a2a._tcp`），同一网络内 Agent 自动互相发现
-- **静态发现** — 支持 `bootstrap.json` 配置已知端点
-- **CLI 工具链** — `agentmesh discover`、`run`、`trace`，完整的 Agent 交互闭环
-- **控制面 daemon**（`agentmeshd`）— 事件存储（JSONL + SQLite）、HTTP API
-- **OpenClaw A2A 桥接** — AgentCard、`message/send`、`message/stream`、`tasks/get`、`tasks/cancel`
-- **SSE 流式响应** — 文本、工具状态、推理元数据实时推送
-- **多 Agent 路由** — 根据 `skill_id` 路由到不同 Agent identity
-- **鉴权** — Bearer Token（自动生成或显式配置），自动从 OpenClaw 配置读取
-- **会话策略** — `per-task`、`per-conversation`、`shared`
-- **Python SDK**（`agentmesh-discovery`）— mDNS + 静态发现，基于官方 `a2a-sdk` 类型
-- **对齐 A2A v0.3** — `kind`、`context_id`、`message_id`、9 状态任务生命周期
+| 功能 | 说明 | 包 |
+|---|---|---|
+| mDNS 发现 | 基于 `_a2a._tcp` 局域网自动发现 Agent | `discovery-py` (Python)、`openclaw-plugin` (TS) |
+| 静态发现 | 通过 `bootstrap.json` 配置已知端点 | `discovery-py` (Python) |
+| CLI 工具链 | `discover`、`run`、`trace` — 完整的 Agent 交互闭环 | `agentmesh-cli` (Python) |
+| 控制面 | 事件存储（JSONL + SQLite）、HTTP API、daemon 管理 | `agentmeshd` (Python) |
+| A2A 桥接 | AgentCard、`message/send`、`message/stream`、`tasks/get`、`tasks/cancel` | `openclaw-plugin` (TS) |
+| SSE 流式响应 | 实时推送文本、工具状态、推理元数据 | `openclaw-plugin` (TS) |
+| 多 Agent 路由 | 根据 `skill_id` 路由到不同 Agent identity | `openclaw-plugin` (TS) |
+| Token 鉴权 | 自动生成或显式配置；CLI 自动从配置读取 | `openclaw-plugin` (TS)、`agentmesh-cli` (Python) |
+| 会话策略 | `per-task`、`per-conversation`、`shared` | `openclaw-plugin` (TS) |
+| 对齐 A2A v0.3 | `kind`、`context_id`、`message_id`、9 状态生命周期 | 全部 |
 
 **尚未支持：** WAN / 互联网发现（当前仅限局域网）
 
