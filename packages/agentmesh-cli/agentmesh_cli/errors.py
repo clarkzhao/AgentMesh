@@ -11,7 +11,6 @@ class ExitCode(IntEnum):
     DISCOVERY_FAILED = 11
     INVOKE_FAILED = 12
     INSTALL_FAILED = 13
-    ADAPTER_NOT_FOUND = 14
 
 
 class CLIError(Exception):
@@ -37,7 +36,3 @@ class InvokeFailedError(CLIError):
 
 class InstallFailedError(CLIError):
     exit_code = ExitCode.INSTALL_FAILED
-
-
-class AdapterNotFoundError(CLIError):
-    exit_code = ExitCode.ADAPTER_NOT_FOUND

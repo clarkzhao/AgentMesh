@@ -77,7 +77,7 @@ make format-agentmesh-cli    # Format CLI with ruff
 - **agentmeshd daemon**: Python (Starlette + uvicorn), PID file in `~/.agentmesh/agentmeshd.pid`, HTTP API on port 8321 by default.
 - **agentmesh CLI**: Typer-based CLI (`agentmesh`). Commands: `discover`, `run`, `trace`, `openclaw install`, `nanoclaw install`. Communicates with agentmeshd via `AgentmeshdClient` (httpx). Uses `EventRecorder` for best-effort event recording. Exit codes defined in `ExitCode` enum (0=OK, 10=daemon unavailable, 11=discovery failed, 12=invoke failed, 13=install failed).
 - **CLI daemon dependency**: `run` requires daemon by default (exit 10 if unreachable); `--no-daemon` skips check. `trace` always requires daemon. `discover` is daemon-independent.
-- **Adapter pattern**: `Adapter` Protocol with `name`, `install()`, `is_installed()`. Only covers install logic; discover/invoke are generic A2A operations. NanoClaw is a stub.
+- **Adapter pattern**: Each framework adapter (e.g., `OpenClawAdapter`) provides `install()` and `is_installed()`. Commands import adapters directly — no registry or protocol indirection. NanoClaw is a stub.
 
 ## Installing the Plugin in OpenClaw
 

@@ -10,6 +10,8 @@ from agentmesh_cli.errors import InstallFailedError
 
 _CONFIG_FILE = Path("~/.openclaw/openclaw.json").expanduser()
 
+_RSYNC_EXCLUDES = ["node_modules", ".vite", "package-lock.json"]
+
 
 class OpenClawAdapter:
     name = "openclaw"
@@ -35,15 +37,14 @@ class OpenClawAdapter:
         plugin_src = self._find_plugin_source()
 
         if registered and dir_exists:
-            # Force reinstall — dir and config both intact.
-            # Sync src/ to preserve node_modules and other state.
-            self._sync_src(plugin_src, self._EXTENSION_DIR)
+            # Force reinstall — sync src/ only to preserve node_modules.
+            _rsync(f"{plugin_src}/src/", f"{self._EXTENSION_DIR}/src/", delete=True)
         elif registered and not dir_exists:
             # Broken state — config references plugin but dir is gone.
-            # Recreate the full directory.
-            self._rsync_full(plugin_src, self._EXTENSION_DIR)
+            self._EXTENSION_DIR.mkdir(parents=True, exist_ok=True)
+            _rsync(f"{plugin_src}/", f"{self._EXTENSION_DIR}/")
         else:
-            # True fresh install — use openclaw CLI to register + copy.
+            # Fresh install — use openclaw CLI to register + copy.
             self._install_via_cli(plugin_src)
 
         # Ensure node dependencies are installed
@@ -55,40 +56,6 @@ class OpenClawAdapter:
             raise InstallFailedError(
                 "Plugin installation reported success but extension directory not found."
             )
-
-    def _sync_src(self, src: Path, dest: Path) -> None:
-        """Sync only src/ into the extension directory (preserves node_modules)."""
-        subprocess.run(
-            [
-                "rsync",
-                "-a",
-                "--delete",
-                f"{src}/src/",
-                f"{dest}/src/",
-            ],
-            check=True,
-            capture_output=True,
-        )
-
-    def _rsync_full(self, src: Path, dest: Path) -> None:
-        """Sync entire plugin source into the extension directory."""
-        dest.mkdir(parents=True, exist_ok=True)
-        subprocess.run(
-            [
-                "rsync",
-                "-a",
-                "--exclude",
-                "node_modules",
-                "--exclude",
-                ".vite",
-                "--exclude",
-                "package-lock.json",
-                f"{src}/",
-                f"{dest}/",
-            ],
-            check=True,
-            capture_output=True,
-        )
 
     def _install_deps(self, dest: Path) -> None:
         """Install node dependencies in the extension directory."""
@@ -116,22 +83,7 @@ class OpenClawAdapter:
     def _install_via_cli(self, plugin_src: Path) -> None:
         """Install plugin from scratch via openclaw CLI."""
         with tempfile.TemporaryDirectory() as tmpdir:
-            subprocess.run(
-                [
-                    "rsync",
-                    "-a",
-                    "--exclude",
-                    "node_modules",
-                    "--exclude",
-                    ".vite",
-                    "--exclude",
-                    "package-lock.json",
-                    f"{plugin_src}/",
-                    f"{tmpdir}/",
-                ],
-                check=True,
-                capture_output=True,
-            )
+            _rsync(f"{plugin_src}/", f"{tmpdir}/")
 
             result = subprocess.run(
                 ["openclaw", "plugins", "install", tmpdir],
@@ -159,7 +111,6 @@ class OpenClawAdapter:
 
     def _find_plugin_source(self) -> Path:
         """Find the openclaw-plugin source directory in the monorepo."""
-        # Try relative to this file (installed from monorepo)
         candidates = [
             Path(__file__).resolve().parents[3] / "openclaw-plugin",
             Path.cwd() / "packages" / "openclaw-plugin",
@@ -171,3 +122,14 @@ class OpenClawAdapter:
         raise InstallFailedError(
             "Cannot find packages/openclaw-plugin/ source. Run from the agentmesh monorepo root."
         )
+
+
+def _rsync(src: str, dest: str, *, delete: bool = False) -> None:
+    """Run rsync with standard excludes."""
+    cmd = ["rsync", "-a"]
+    if delete:
+        cmd.append("--delete")
+    for exc in _RSYNC_EXCLUDES:
+        cmd.extend(["--exclude", exc])
+    cmd.extend([src, dest])
+    subprocess.run(cmd, check=True, capture_output=True)
