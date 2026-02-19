@@ -1,0 +1,31 @@
+[project]
+name = "agentmesh-cli"
+version = "0.1.0"
+description = "AgentMesh CLI — discover, invoke, and trace A2A agents"
+requires-python = ">=3.12"
+dependencies = [
+    "typer>=0.15.0",
+    "httpx>=0.28.0",
+    "agentmesh-discovery",
+    "a2a-sdk>=0.3.22,<0.4.0",
+    "rich>=13.0.0",
+]
+
+[project.scripts]
+agentmesh = "agentmesh_cli.cli:app"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.pytest.ini_options]
+asyncio_mode = "strict"
+
+[dependency-groups]
+dev = [
+    "ruff>=0.9.0",
+    "pyright>=1.1.0",
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.24.0",
+    "respx>=0.22.0",
+]

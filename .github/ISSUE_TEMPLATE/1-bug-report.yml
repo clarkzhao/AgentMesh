@@ -21,6 +21,7 @@ body:
         - openclaw-plugin
         - discovery-py
         - agentmeshd
+        - agentmesh-cli
         - examples
         - other
     validations:

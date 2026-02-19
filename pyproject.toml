@@ -6,11 +6,13 @@ requires-python = ">=3.12"
 dependencies = [
     "agentmesh-discovery",
     "agentmeshd",
+    "agentmesh-cli",
 ]
 
 [tool.uv.workspace]
-members = ["packages/discovery-py", "packages/agentmeshd"]
+members = ["packages/discovery-py", "packages/agentmeshd", "packages/agentmesh-cli"]
 
 [tool.uv.sources]
 agentmesh-discovery = { workspace = true }
 agentmeshd = { workspace = true }
+agentmesh-cli = { workspace = true }

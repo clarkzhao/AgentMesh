@@ -33,6 +33,7 @@ This project follows [Conventional Commits](https://www.conventionalcommits.org/
 | `discovery-py` | `packages/discovery-py/` |
 | `openclaw-plugin` | `packages/openclaw-plugin/` |
 | `agentmeshd` | `packages/agentmeshd/` |
+| `agentmesh-cli` | `packages/agentmesh-cli/` |
 | `examples` | `examples/` |
 | `docs` | `docs/`, `README.md` |
 | `root` | Root config files (`pyproject.toml`, `package.json`, etc.) |

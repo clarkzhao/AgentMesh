@@ -1,6 +1,6 @@
 {
   "pythonVersion": "3.12",
   "typeCheckingMode": "strict",
-  "include": ["packages/discovery-py/agentmesh_discovery", "packages/agentmeshd/agentmeshd"],
+  "include": ["packages/discovery-py/agentmesh_discovery", "packages/agentmeshd/agentmeshd", "packages/agentmesh-cli/agentmesh_cli"],
   "exclude": ["**/__pycache__", "**/node_modules", "**/.venv"]
 }

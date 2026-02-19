@@ -12,10 +12,12 @@ prepare: ## Install all dependencies (pnpm + uv).
 	@echo "==> Installing Python dependencies"
 	uv sync
 	@echo "==> Installing agentmeshd CLI"
-	uv tool install --from ./packages/agentmeshd agentmeshd --force
+	uv tool install --from ./packages/agentmeshd agentmeshd --force --reinstall
+	@echo "==> Installing agentmesh CLI"
+	uv tool install --from ./packages/agentmesh-cli agentmesh-cli --force --reinstall
 
 .PHONY: test
-test: test-openclaw-plugin test-discovery-py test-agentmeshd ## Run all tests.
+test: test-openclaw-plugin test-discovery-py test-agentmeshd test-agentmesh-cli ## Run all tests.
 
 .PHONY: test-openclaw-plugin
 test-openclaw-plugin: ## Run TS plugin tests.
@@ -27,8 +29,18 @@ test-discovery-py: ## Run Python SDK tests.
 	@echo "==> Testing discovery-py"
 	uv run --project packages/discovery-py pytest packages/discovery-py/tests
 
+.PHONY: test-agentmesh-cli
+test-agentmesh-cli: ## Run CLI tests.
+	@echo "==> Testing agentmesh-cli"
+	uv run --project packages/agentmesh-cli pytest packages/agentmesh-cli/tests
+
+.PHONY: test-e2e
+test-e2e: ## Run E2E smoke tests.
+	@echo "==> Running E2E tests"
+	uv run --project packages/agentmesh-cli pytest tests/e2e -v
+
 .PHONY: check
-check: check-openclaw-plugin check-discovery-py check-agentmeshd ## Lint + typecheck all.
+check: check-openclaw-plugin check-discovery-py check-agentmeshd check-agentmesh-cli ## Lint + typecheck all.
 
 .PHONY: check-openclaw-plugin
 check-openclaw-plugin: ## Typecheck TS plugin.
@@ -42,13 +54,25 @@ check-discovery-py: ## Lint + typecheck Python SDK.
 	@echo "==> Typechecking discovery-py"
 	uv run --project packages/discovery-py pyright packages/discovery-py/agentmesh_discovery
 
+.PHONY: check-agentmesh-cli
+check-agentmesh-cli: ## Lint + typecheck CLI.
+	@echo "==> Linting agentmesh-cli"
+	uv run --project packages/agentmesh-cli ruff check packages/agentmesh-cli
+	@echo "==> Typechecking agentmesh-cli"
+	uv run --project packages/agentmesh-cli pyright packages/agentmesh-cli/agentmesh_cli
+
 .PHONY: format
-format: format-discovery-py format-agentmeshd ## Format Python (TS has no formatter configured).
+format: format-discovery-py format-agentmeshd format-agentmesh-cli ## Format Python (TS has no formatter configured).
 
 .PHONY: format-discovery-py
 format-discovery-py: ## Format Python SDK with ruff.
 	@echo "==> Formatting discovery-py"
 	uv run --project packages/discovery-py ruff format packages/discovery-py
+
+.PHONY: format-agentmesh-cli
+format-agentmesh-cli: ## Format CLI with ruff.
+	@echo "==> Formatting agentmesh-cli"
+	uv run --project packages/agentmesh-cli ruff format packages/agentmesh-cli
 
 .PHONY: test-agentmeshd
 test-agentmeshd: ## Run agentmeshd tests.

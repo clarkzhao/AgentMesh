@@ -97,9 +97,11 @@ agentmesh/
 │   ├── discovery-py/           # Python SDK — mDNS + static discovery
 │   ├── openclaw-plugin/        # OpenClaw extension: AgentCard + A2A bridge + mDNS
 │   ├── agentmeshd/             # Python — control plane daemon, EventV1, JSONL+SQLite
+│   ├── agentmesh-cli/          # Python — CLI: discover, invoke, trace A2A agents
 │   ├── discovery-ts/           # TS SDK (planned)
 │   ├── registry/               # Registry server (planned)
 │   └── identity/               # Ed25519 identity (planned)
+├── tests/e2e/                  # E2E smoke tests (mock agent + in-process daemon)
 ├── examples/
 │   ├── py-agent/               # Discover → A2A task → print result
 │   └── demo.sh
@@ -224,6 +226,117 @@ AGENTMESH_TOKEN=your-secret-token uv run python examples/py-agent/main.py \
   --url http://127.0.0.1:18789/.well-known/agent-card.json "Hello!"
 ```
 
+## CLI Usage
+
+The `agentmesh` CLI provides a unified interface for discovering, invoking, and tracing A2A agents. It is installed automatically by `make prepare`.
+
+### First-time usage path
+
+```bash
+# 1. Start the daemon (required for trace)
+agentmeshd start
+
+# 2. Discover agents on the local network
+agentmesh discover
+
+# 3. Send a message to an agent
+agentmesh run --agent http://127.0.0.1:18789/.well-known/agent-card.json "What is 2+2?"
+
+# 4. View the event trace
+agentmesh trace <run-id>
+
+# 5. Stop the daemon when done
+agentmeshd stop
+```
+
+### `agentmesh discover`
+
+Scan the local network for A2A agents via mDNS, optionally merging static bootstrap entries.
+
+```bash
+agentmesh discover                           # Default 5s timeout, table output
+agentmesh discover --timeout 10              # Longer scan
+agentmesh discover --bootstrap agents.json   # Include static entries
+agentmesh discover --format json             # JSON output
+```
+
+Exit codes: `0` (agents found), `11` (no agents found).
+
+### `agentmesh run`
+
+Send a message to an A2A agent. By default, events are recorded to `agentmeshd` for later tracing.
+
+```bash
+# By AgentCard URL
+agentmesh run --agent http://127.0.0.1:18789/.well-known/agent-card.json "Hello"
+
+# With auth token
+agentmesh run --agent http://127.0.0.1:18789/.well-known/agent-card.json \
+  --token my-secret "Hello"
+
+# Skip daemon (no event recording)
+agentmesh run --agent http://127.0.0.1:18789/.well-known/agent-card.json \
+  --no-daemon "Hello"
+
+# Custom daemon URL
+agentmesh run --agent http://127.0.0.1:18789/.well-known/agent-card.json \
+  --daemon-url http://localhost:9000 "Hello"
+
+# JSON output
+agentmesh run --agent http://127.0.0.1:18789/.well-known/agent-card.json \
+  --format json "Hello"
+```
+
+Options:
+
+| Option | Description |
+|---|---|
+| `--agent` / `--to` | Agent name or AgentCard URL |
+| `--from` | Sender identity (metadata only) |
+| `--token` | Bearer token for A2A auth |
+| `--timeout` | A2A call timeout in seconds (default: 120) |
+| `--no-stream` | Disable streaming output |
+| `--no-daemon` | Skip daemon check, no event recording |
+| `--daemon-url` | Override agentmeshd URL |
+| `--format` | `streaming` (default) or `json` |
+
+Exit codes: `0` (success), `10` (daemon unavailable), `11` (agent not found), `12` (invoke failed).
+
+### `agentmesh trace`
+
+View the event timeline for a previous run. Requires `agentmeshd` to be running.
+
+```bash
+agentmesh trace <run-id>                     # Timeline output
+agentmesh trace <task-id>                    # Also accepts task IDs
+agentmesh trace <run-id> --format json       # JSON output
+agentmesh trace <run-id> --daemon-url http://localhost:9000
+```
+
+Example timeline output:
+
+```
+10:00:00.000  message   "What is 2+2?"
+10:00:00.120  status    working
+10:00:01.100  status    completed
+10:00:01.100  artifact  "4"
+```
+
+Exit codes: `0` (success), `1` (no events found), `10` (daemon unavailable).
+
+### `agentmesh openclaw install`
+
+Install the OpenClaw A2A bridge plugin. Requires the `openclaw` CLI to be available.
+
+```bash
+agentmesh openclaw install           # Install plugin
+agentmesh openclaw install --force   # Reinstall even if already present
+```
+
+### `agentmesh nanoclaw install`
+
+NanoClaw support is not yet implemented. This command exits with a message indicating the adapter is pending.
+
 ### Verify Manually
 
 ```bash
@@ -293,6 +406,18 @@ agentmeshd status
 curl http://localhost:8321/api/events?run_id=r1
 ```
 
+### `agentmesh-cli` — CLI Tool
+
+Unified CLI for interacting with A2A agents and the AgentMesh control plane:
+
+- **`agentmesh discover`** — mDNS + static agent discovery
+- **`agentmesh run`** — invoke an agent with streaming output and event recording
+- **`agentmesh trace`** — replay event timelines from agentmeshd
+- **`agentmesh openclaw install`** — install the OpenClaw A2A bridge plugin
+- **`agentmesh nanoclaw install`** — stub (not yet implemented)
+
+Communicates with `agentmeshd` via HTTP for event recording and querying. Uses `agentmesh-discovery` for mDNS/static discovery and `a2a-sdk` for the A2A protocol.
+
 ### `openclaw-plugin` — OpenClaw A2A Bridge
 
 Exposes any OpenClaw agent as a standard A2A agent:
@@ -334,10 +459,13 @@ Per-package targets are also available:
 ```bash
 make test-openclaw-plugin    # TS plugin tests (102 tests)
 make test-discovery-py       # Python SDK tests (16 tests)
-make test-agentmeshd         # agentmeshd tests (28 tests)
+make test-agentmeshd         # agentmeshd tests (29 tests)
+make test-agentmesh-cli      # CLI unit tests (34 tests)
+make test-e2e                # E2E smoke tests (9 tests)
 make check-openclaw-plugin   # Typecheck TS plugin
 make check-discovery-py      # Lint + typecheck Python SDK
 make check-agentmeshd        # Lint + typecheck agentmeshd
+make check-agentmesh-cli     # Lint + typecheck CLI
 ```
 
 ## Known Limitations (M2)

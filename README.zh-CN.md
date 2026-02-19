@@ -29,9 +29,11 @@ agentmesh/
 │   ├── discovery-py/           # Python SDK：mDNS + 静态发现
 │   ├── openclaw-plugin/        # OpenClaw 插件：AgentCard + A2A 桥接 + mDNS
 │   ├── agentmeshd/             # Python：控制面 daemon、EventV1、JSONL+SQLite
+│   ├── agentmesh-cli/          # Python：CLI — 发现、调用、追踪 A2A Agent
 │   ├── discovery-ts/           # TS SDK（规划中）
 │   ├── registry/               # 注册中心（规划中）
 │   └── identity/               # Ed25519 身份（规划中）
+├── tests/e2e/                  # E2E 烟测（mock agent + in-process daemon）
 ├── examples/
 │   ├── py-agent/               # 发现 -> 调用 A2A -> 输出结果
 │   └── demo.sh
@@ -135,6 +137,112 @@ AGENTMESH_TOKEN=your-secret-token uv run python examples/py-agent/main.py \
   --url http://127.0.0.1:18789/.well-known/agent-card.json "Hello!"
 ```
 
+## CLI 使用
+
+`agentmesh` CLI 提供统一的命令行界面，用于发现、调用和追踪 A2A Agent。`make prepare` 会自动安装。
+
+### 首次使用路径
+
+```bash
+# 1. 启动 daemon（trace 依赖）
+agentmeshd start
+
+# 2. 发现局域网 Agent
+agentmesh discover
+
+# 3. 向 Agent 发送消息
+agentmesh run --agent http://127.0.0.1:18789/.well-known/agent-card.json "1+1 等于多少？"
+
+# 4. 查看事件轨迹
+agentmesh trace <run-id>
+
+# 5. 停止 daemon
+agentmeshd stop
+```
+
+### `agentmesh discover`
+
+扫描局域网 A2A Agent（mDNS），可合并静态引导文件。
+
+```bash
+agentmesh discover                           # 默认 5 秒超时，表格输出
+agentmesh discover --timeout 10              # 延长扫描时间
+agentmesh discover --bootstrap agents.json   # 合并静态条目
+agentmesh discover --format json             # JSON 输出
+```
+
+退出码：`0`（发现 Agent）、`11`（未发现）。
+
+### `agentmesh run`
+
+向 A2A Agent 发送消息。默认会将事件记录到 `agentmeshd`，供后续追踪。
+
+```bash
+# 通过 AgentCard URL 调用
+agentmesh run --agent http://127.0.0.1:18789/.well-known/agent-card.json "你好"
+
+# 带鉴权 token
+agentmesh run --agent http://127.0.0.1:18789/.well-known/agent-card.json \
+  --token my-secret "你好"
+
+# 跳过 daemon（不记录事件）
+agentmesh run --agent http://127.0.0.1:18789/.well-known/agent-card.json \
+  --no-daemon "你好"
+
+# JSON 输出
+agentmesh run --agent http://127.0.0.1:18789/.well-known/agent-card.json \
+  --format json "你好"
+```
+
+选项：
+
+| 选项 | 说明 |
+|---|---|
+| `--agent` / `--to` | Agent 名称或 AgentCard URL |
+| `--from` | 发送方身份（仅记录到 metadata） |
+| `--token` | A2A 鉴权 Bearer Token |
+| `--timeout` | A2A 调用超时秒数（默认 120） |
+| `--no-stream` | 禁用流式输出 |
+| `--no-daemon` | 跳过 daemon 检查，不记录事件 |
+| `--daemon-url` | 自定义 agentmeshd 地址 |
+| `--format` | `streaming`（默认）或 `json` |
+
+退出码：`0`（成功）、`10`（daemon 不可用）、`11`（Agent 未找到）、`12`（调用失败）。
+
+### `agentmesh trace`
+
+回放某次调用的事件时间线。需要 `agentmeshd` 运行中。
+
+```bash
+agentmesh trace <run-id>                     # 时间线输出
+agentmesh trace <task-id>                    # 也接受 task ID
+agentmesh trace <run-id> --format json       # JSON 输出
+```
+
+示例时间线输出：
+
+```
+10:00:00.000  message   "1+1 等于多少？"
+10:00:00.120  status    working
+10:00:01.100  status    completed
+10:00:01.100  artifact  "2"
+```
+
+退出码：`0`（成功）、`1`（无事件）、`10`（daemon 不可用）。
+
+### `agentmesh openclaw install`
+
+安装 OpenClaw A2A 桥接插件，需要 `openclaw` CLI 可用。
+
+```bash
+agentmesh openclaw install           # 安装插件
+agentmesh openclaw install --force   # 强制重新安装
+```
+
+### `agentmesh nanoclaw install`
+
+NanoClaw 尚未实现，该命令会提示适配器待开发。
+
 ## 手动验证
 
 ```bash
@@ -178,6 +286,30 @@ AgentMesh 控制面 daemon，提供事件基础设施与 HTTP API：
 - **Daemon 管理** — `agentmeshd start`、`agentmeshd stop`、`agentmeshd status`
 - **旧格式兼容** — 自动将旧 `EventRecord` 格式提升为 EventV1（`event_type` → `kind`，`message` → `payload`）
 
+### `packages/agentmesh-cli`
+
+AgentMesh 统一 CLI 工具：
+
+- **`agentmesh discover`** — mDNS + 静态 Agent 发现
+- **`agentmesh run`** — 调用 Agent，流式输出，同时记录事件
+- **`agentmesh trace`** — 回放 agentmeshd 中的事件时间线
+- **`agentmesh openclaw install`** — 安装 OpenClaw A2A 桥接插件
+- **`agentmesh nanoclaw install`** — 占位（尚未实现）
+
+通过 HTTP 与 `agentmeshd` 通信完成事件记录和查询。使用 `agentmesh-discovery` 发现 Agent，使用 `a2a-sdk` 实现 A2A 协议。
+
+### `packages/agentmesh-cli`
+
+AgentMesh 统一 CLI 工具：
+
+- **`agentmesh discover`** — mDNS + 静态 Agent 发现
+- **`agentmesh run`** — 调用 Agent，流式输出并记录事件
+- **`agentmesh trace`** — 从 agentmeshd 回放事件时间线
+- **`agentmesh openclaw install`** — 安装 OpenClaw A2A 桥接插件
+- **`agentmesh nanoclaw install`** — 占位（尚未实现）
+
+通过 HTTP 与 `agentmeshd` 通信，使用 `agentmesh-discovery` 进行发现，使用 `a2a-sdk` 实现 A2A 协议。
+
 ### `packages/openclaw-plugin`
 
 OpenClaw A2A 桥接插件，支持：
@@ -204,10 +336,13 @@ make help
 ```bash
 make test-openclaw-plugin    # TS 插件测试（102 tests）
 make test-discovery-py       # Python SDK 测试（16 tests）
-make test-agentmeshd         # agentmeshd 测试（28 tests）
+make test-agentmeshd         # agentmeshd 测试（29 tests）
+make test-agentmesh-cli      # CLI 单元测试（34 tests）
+make test-e2e                # E2E 烟测（9 tests）
 make check-openclaw-plugin   # TS 类型检查
 make check-discovery-py      # Python SDK lint + 类型检查
 make check-agentmeshd        # agentmeshd lint + 类型检查
+make check-agentmesh-cli     # CLI lint + 类型检查
 ```
 
 ## 已知限制（M2）

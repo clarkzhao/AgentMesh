@@ -10,8 +10,10 @@ Monorepo for A2A agent discovery and OpenClaw bridging. Two languages: TypeScrip
 packages/openclaw-plugin/    # TS: OpenClaw A2A bridge plugin (ESM, vitest)
 packages/discovery-py/       # Python: mDNS + static discovery SDK (pytest)
 packages/agentmeshd/         # Python: control plane daemon — events, store, HTTP API (pytest)
+packages/agentmesh-cli/      # Python: CLI — discover, invoke, trace A2A agents (pytest)
 examples/py-agent/           # Demo script using a2a-sdk client
 docs/                        # Design and adoption notes
+tests/e2e/                   # E2E smoke tests (mock agent + in-process daemon)
 ```
 
 ## Commands
@@ -31,16 +33,20 @@ Per-package targets:
 make test-openclaw-plugin    # TS plugin tests (vitest)
 make test-discovery-py       # Python SDK tests (pytest)
 make test-agentmeshd         # agentmeshd tests (pytest)
+make test-agentmesh-cli      # CLI unit tests (pytest)
+make test-e2e                # E2E smoke tests (mock agent + in-process daemon)
 make check-openclaw-plugin   # Typecheck TS plugin
 make check-discovery-py      # Lint + typecheck Python SDK
 make check-agentmeshd        # Lint + typecheck agentmeshd
+make check-agentmesh-cli     # Lint + typecheck CLI
+make format-agentmesh-cli    # Format CLI with ruff
 ```
 
 ## Conventions
 
 - **Commits**: Conventional Commits, `<type>(<scope>): <description>`.
   Types: `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `chore`, `ci`.
-  Scopes: `discovery-py`, `openclaw-plugin`, `agentmeshd`, `examples`, `docs`, `root`.
+  Scopes: `discovery-py`, `openclaw-plugin`, `agentmeshd`, `agentmesh-cli`, `examples`, `docs`, `root`.
   Omit scope for cross-package changes. See `CONTRIBUTING.md`.
 - **TS style**: ESM (`"type": "module"`), `.js` extensions in imports, no build step (OpenClaw uses jiti).
 - **Python style**: Python 3.12+, ruff lint/format, pyright strict, pytest-asyncio strict mode.
@@ -69,6 +75,9 @@ make check-agentmeshd        # Lint + typecheck agentmeshd
 - **Dual-write storage**: `EventStore` appends to both JSONL (durability) and SQLite (queryability) atomically. SQLite indexes on `run_id`, `task_id`, `kind`.
 - **Legacy EventRecord compat**: `EventV1.from_dict()` auto-detects old format (`event_type` present, `kind` absent) and promotes fields in-place. No migration scripts needed.
 - **agentmeshd daemon**: Python (Starlette + uvicorn), PID file in `~/.agentmesh/agentmeshd.pid`, HTTP API on port 8321 by default.
+- **agentmesh CLI**: Typer-based CLI (`agentmesh`). Commands: `discover`, `run`, `trace`, `openclaw install`, `nanoclaw install`. Communicates with agentmeshd via `AgentmeshdClient` (httpx). Uses `EventRecorder` for best-effort event recording. Exit codes defined in `ExitCode` enum (0=OK, 10=daemon unavailable, 11=discovery failed, 12=invoke failed, 13=install failed).
+- **CLI daemon dependency**: `run` requires daemon by default (exit 10 if unreachable); `--no-daemon` skips check. `trace` always requires daemon. `discover` is daemon-independent.
+- **Adapter pattern**: `Adapter` Protocol with `name`, `install()`, `is_installed()`. Only covers install logic; discover/invoke are generic A2A operations. NanoClaw is a stub.
 
 ## Installing the Plugin in OpenClaw
 
@@ -83,4 +92,6 @@ Run the relevant suite after edits:
 - Changed `packages/openclaw-plugin/src/*.ts` -> `make test-openclaw-plugin`
 - Changed `packages/discovery-py/**/*.py` -> `make test-discovery-py`
 - Changed `packages/agentmeshd/**/*.py` -> `make test-agentmeshd`
+- Changed `packages/agentmesh-cli/**/*.py` -> `make test-agentmesh-cli`
+- Changed `tests/e2e/**/*.py` -> `make test-e2e`
 - Changed multiple packages -> `make test`
