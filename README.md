@@ -1,5 +1,7 @@
 # AgentMesh
 
+[English](./README.md) | [简体中文](./README.zh-CN.md)
+
 Agent discovery mesh for A2A agents. Enables agents across frameworks (OpenClaw, NanoClaw, etc.) to discover each other via mDNS and communicate using the [A2A protocol](https://google.github.io/A2A/).
 
 ## Features (M2)
