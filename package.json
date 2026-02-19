@@ -2,5 +2,11 @@
   "name": "agentmesh",
   "version": "0.1.0",
   "private": true,
-  "description": "Agent discovery mesh for A2A agents"
+  "description": "Agent discovery mesh for A2A agents",
+  "scripts": {
+    "check": "make check",
+    "test": "make test",
+    "build": "make build",
+    "release:check": "make release-check"
+  }
 }

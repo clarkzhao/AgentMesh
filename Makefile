@@ -1,4 +1,8 @@
 .DEFAULT_GOAL := help
+DIST_DIR ?= dist
+PYTHON_DIST_DIR ?= $(DIST_DIR)/python
+NPM_DIST_DIR ?= $(DIST_DIR)/npm
+RELEASE_TAG ?=
 
 .PHONY: help
 help: ## Show available make targets.
@@ -105,3 +109,36 @@ install-plugin: ## Install plugin into OpenClaw (requires openclaw CLI).
 sync-plugin: ## Sync plugin src to OpenClaw after code changes.
 	@echo "==> Syncing plugin source"
 	rsync -a --delete packages/openclaw-plugin/src/ ~/.openclaw/extensions/agentmesh-a2a/src/
+
+.PHONY: release-check
+release-check: ## Validate release versions and (optional) tag alignment.
+	@echo "==> Validating release versions"
+	uv run --python 3.12 python scripts/check_release_versions.py $(if $(RELEASE_TAG),--tag $(RELEASE_TAG),)
+
+.PHONY: build
+build: build-python build-openclaw-plugin ## Build all release artifacts.
+
+.PHONY: build-python
+build-python: build-discovery-dist build-agentmeshd-dist build-agentmesh-cli-dist ## Build all Python package distributions.
+
+.PHONY: build-discovery-dist
+build-discovery-dist: ## Build discovery-py wheel + sdist.
+	@echo "==> Building agentmesh-discovery distributions"
+	uv build --package agentmesh-discovery --out-dir $(PYTHON_DIST_DIR)/discovery --clear
+
+.PHONY: build-agentmeshd-dist
+build-agentmeshd-dist: ## Build agentmeshd wheel + sdist.
+	@echo "==> Building agentmeshd distributions"
+	uv build --package agentmeshd --out-dir $(PYTHON_DIST_DIR)/agentmeshd --clear
+
+.PHONY: build-agentmesh-cli-dist
+build-agentmesh-cli-dist: ## Build agentmesh-cli wheel + sdist.
+	@echo "==> Building agentmesh-cli distributions"
+	uv build --package agentmesh-cli --out-dir $(PYTHON_DIST_DIR)/agentmesh-cli --clear
+
+.PHONY: build-openclaw-plugin
+build-openclaw-plugin: ## Pack the OpenClaw plugin for npm release.
+	@echo "==> Packing @agentmesh/agentmesh-a2a"
+	@PLUGIN_VERSION=$$(node -p "require('./packages/openclaw-plugin/package.json').version"); \
+	mkdir -p "$(NPM_DIST_DIR)/$$PLUGIN_VERSION"; \
+	pnpm --filter @agentmesh/agentmesh-a2a pack --pack-destination "$(NPM_DIST_DIR)/$$PLUGIN_VERSION"

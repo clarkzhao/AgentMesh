@@ -326,6 +326,8 @@ make prepare       # Install all dependencies + CLI tools
 make test          # Run all tests (TS + Python)
 make check         # Lint + typecheck all
 make format        # Format Python code
+make release-check # Validate release version alignment (optionally with RELEASE_TAG=vX.Y.Z)
+make build         # Build Python and npm release artifacts under dist/
 make help          # Show all available targets
 ```
 

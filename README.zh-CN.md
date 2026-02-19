@@ -326,6 +326,8 @@ make prepare       # 安装所有依赖 + CLI 工具
 make test          # 运行全部测试（TS + Python）
 make check         # Lint + 类型检查
 make format        # 格式化 Python 代码
+make release-check # 校验发布版本一致性（可选：RELEASE_TAG=vX.Y.Z）
+make build         # 构建 Python 与 npm 发布产物到 dist/
 make help          # 查看所有可用目标
 ```
 

@@ -1,0 +1,165 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+concurrency:
+  group: release-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  id-token: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: astral-sh/setup-uv@v5
+
+      - name: Validate release versions
+        run: |
+          if [[ "${GITHUB_REF_TYPE}" == "tag" ]]; then
+            make release-check RELEASE_TAG="${GITHUB_REF_NAME}"
+          else
+            make release-check
+          fi
+
+  build-artifacts:
+    runs-on: ubuntu-latest
+    needs: validate
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: "9"
+
+      - uses: astral-sh/setup-uv@v5
+
+      - name: Install dependencies
+        run: make prepare
+
+      - name: Build release artifacts
+        run: make build
+
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-artifacts
+          path: dist/
+          if-no-files-found: error
+          retention-days: 30
+
+  create-github-release:
+    runs-on: ubuntu-latest
+    needs: build-artifacts
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: release-artifacts
+          path: .
+
+      - name: Generate checksums
+        run: |
+          find dist -type f \( -name "*.whl" -o -name "*.tar.gz" -o -name "*.tgz" \) -print0 \
+            | sort -z \
+            | xargs -0 sha256sum > dist/checksums.txt
+
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/python/discovery/*
+            dist/python/agentmeshd/*
+            dist/python/agentmesh-cli/*
+            dist/npm/*/*.tgz
+            dist/checksums.txt
+          generate_release_notes: true
+
+  publish-pypi:
+    runs-on: ubuntu-latest
+    needs: build-artifacts
+    if: startsWith(github.ref, 'refs/tags/v') && secrets.PYPI_API_TOKEN != ''
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: release-artifacts
+          path: .
+
+      - name: Publish agentmesh-discovery to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          user: __token__
+          password: ${{ secrets.PYPI_API_TOKEN }}
+          packages-dir: dist/python/discovery
+          skip-existing: true
+
+      - name: Publish agentmeshd to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          user: __token__
+          password: ${{ secrets.PYPI_API_TOKEN }}
+          packages-dir: dist/python/agentmeshd
+          skip-existing: true
+
+      - name: Publish agentmesh-cli to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          user: __token__
+          password: ${{ secrets.PYPI_API_TOKEN }}
+          packages-dir: dist/python/agentmesh-cli
+          skip-existing: true
+
+  publish-npm:
+    runs-on: ubuntu-latest
+    needs: build-artifacts
+    if: startsWith(github.ref, 'refs/tags/v') && secrets.NPM_TOKEN != ''
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: release-artifacts
+          path: .
+
+      - name: Publish @agentmesh/agentmesh-a2a
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          VERSION="$(node -p "require('./packages/openclaw-plugin/package.json').version")"
+          TARBALL="dist/npm/${VERSION}/agentmesh-agentmesh-a2a-${VERSION}.tgz"
+          if [[ ! -f "${TARBALL}" ]]; then
+            echo "Expected tarball not found: ${TARBALL}" >&2
+            find dist/npm -maxdepth 3 -type f -print >&2 || true
+            exit 1
+          fi
+
+          DIST_TAG="latest"
+          if [[ "${VERSION}" =~ -([a-zA-Z]+)\.[0-9]+$ ]]; then
+            DIST_TAG="${BASH_REMATCH[1]}"
+          fi
+
+          npm publish "${TARBALL}" --access public --provenance --tag "${DIST_TAG}"
