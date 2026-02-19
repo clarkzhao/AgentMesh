@@ -30,10 +30,15 @@ jobs:
 
       - uses: astral-sh/setup-uv@v5
 
-      - name: Install PlantUML + Graphviz
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Install Graphviz
         run: |
           sudo apt-get update
-          sudo apt-get install -y plantuml graphviz
+          sudo apt-get install -y graphviz
 
       - name: Render architecture diagrams
         run: make render-diagrams
