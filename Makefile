@@ -110,6 +110,16 @@ sync-plugin: ## Sync plugin src to OpenClaw after code changes.
 	@echo "==> Syncing plugin source"
 	rsync -a --delete packages/openclaw-plugin/src/ ~/.openclaw/extensions/agentmesh-a2a/src/
 
+.PHONY: render-diagrams
+render-diagrams: ## Render PlantUML diagrams to SVG.
+	@echo "==> Rendering PlantUML diagrams"
+	bash scripts/render_diagrams.sh
+
+.PHONY: check-diagrams
+check-diagrams: render-diagrams ## Ensure generated diagram SVGs are up-to-date.
+	@echo "==> Checking diagram SVGs are committed"
+	git diff --exit-code -- docs/diagrams/*.svg
+
 .PHONY: release-check
 release-check: ## Validate release versions and (optional) tag alignment.
 	@echo "==> Validating release versions"

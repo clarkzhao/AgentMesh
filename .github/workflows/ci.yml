@@ -30,6 +30,17 @@ jobs:
 
       - uses: astral-sh/setup-uv@v5
 
+      - name: Install PlantUML + Graphviz
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y plantuml graphviz
+
+      - name: Render architecture diagrams
+        run: make render-diagrams
+
+      - name: Verify generated diagrams are committed
+        run: make check-diagrams
+
       - name: Install dependencies
         run: make prepare
 

@@ -1,0 +1,24 @@
+@startuml
+participant "agentmesh CLI\n(or SDK)" as Client
+participant "mDNS\n(_a2a._tcp)" as MDNS
+participant "agentmesh-a2a\nPlugin" as Plugin
+participant "OpenClaw\nGateway" as OC
+
+== Discovery ==
+
+Plugin -> MDNS : announce(_a2a._tcp)\nTXT: url, name, v=1
+Client -> MDNS : browse(_a2a._tcp)
+MDNS --> Client : found: OpenClaw\n@ 127.0.0.1:18789
+
+Client -> Plugin : GET /.well-known/agent-card.json
+Plugin --> Client : AgentCard\n{name, url, skills, capabilities}
+
+== A2A Message ==
+
+Client -> Plugin : POST /a2a\nAuthorization: Bearer <token>\n{"method":"message/send",\n "params":{"message":{...}}}
+Plugin -> Plugin : validate token
+Plugin -> Plugin : resolve agent + session key
+Plugin -> OC : dispatchReplyFromConfig()\ncreate session, run agent
+OC --> Plugin : agent reply (text)
+Plugin --> Client : {"result":{"id":"t1",\n "status":{"state":"completed"},\n "artifacts":[{"parts":[{"kind":"text","text":"..."}]}]}}
+@enduml

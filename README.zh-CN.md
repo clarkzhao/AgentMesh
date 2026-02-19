@@ -237,69 +237,15 @@ uv run python examples/py-agent/main.py "1+9"
 
 ### 组件概览
 
-```plantuml
-@startuml
-skinparam componentStyle rectangle
+![AgentMesh 组件概览](docs/diagrams/component-overview.zh-CN.svg)
 
-package "LAN" {
-  [OpenClaw Gateway] as OC
-  [agentmesh-a2a Plugin] as Plugin
-  [agentmesh CLI / SDK] as Client
-
-  OC --> Plugin : loads
-  Plugin --> OC : dispatchReplyFromConfig()
-}
-
-cloud "mDNS (_a2a._tcp)" as MDNS
-
-Plugin ..> MDNS : announce
-Client ..> MDNS : discover
-
-node "A2A Protocol (HTTP)" {
-  [GET /.well-known/agent-card.json] as CardEP
-  [POST /a2a] as A2aEP
-}
-
-Plugin --> CardEP : serves
-Plugin --> A2aEP : serves
-Client --> CardEP : fetch AgentCard
-Client --> A2aEP : message/send | message/stream
-
-note right of MDNS
-  当前仅 LAN
-  WAN 注册中心规划中
-end note
-@enduml
-```
+图源：`docs/diagrams/component-overview.zh-CN.puml`
 
 ### 发现 + 调用流程
 
-```plantuml
-@startuml
-participant "agentmesh CLI\n(or SDK)" as Client
-participant "mDNS\n(_a2a._tcp)" as MDNS
-participant "agentmesh-a2a\nPlugin" as Plugin
-participant "OpenClaw\nGateway" as OC
+![AgentMesh 发现与调用流程](docs/diagrams/discovery-invoke-flow.zh-CN.svg)
 
-== 发现 ==
-
-Plugin -> MDNS : announce(_a2a._tcp)\nTXT: url, name, v=1
-Client -> MDNS : browse(_a2a._tcp)
-MDNS --> Client : found: OpenClaw\n@ 127.0.0.1:18789
-
-Client -> Plugin : GET /.well-known/agent-card.json
-Plugin --> Client : AgentCard\n{name, url, skills, capabilities}
-
-== A2A 消息 ==
-
-Client -> Plugin : POST /a2a\nAuthorization: Bearer <token>\n{"method":"message/send",\n "params":{"message":{...}}}
-Plugin -> Plugin : 验证 token
-Plugin -> Plugin : 解析 agent + session key
-Plugin -> OC : dispatchReplyFromConfig()\n创建会话，运行 agent
-OC --> Plugin : agent 回复（文本）
-Plugin --> Client : {"result":{"id":"t1",\n "status":{"state":"completed"},\n "artifacts":[{"parts":[{"kind":"text","text":"..."}]}]}}
-@enduml
-```
+图源：`docs/diagrams/discovery-invoke-flow.zh-CN.puml`
 
 ### 仓库结构
 
@@ -310,6 +256,8 @@ agentmesh/
 │   ├── agentmeshd/             # 控制面 daemon：事件存储、HTTP API
 │   ├── discovery-py/           # Python SDK：mDNS + 静态发现
 │   └── openclaw-plugin/        # OpenClaw 插件：AgentCard + A2A 桥接 + mDNS
+├── docs/diagrams/              # README 使用的 PlantUML 源文件与生成 SVG
+├── scripts/                    # 发布/CI 辅助脚本
 ├── tests/e2e/                  # E2E 烟测
 ├── examples/py-agent/          # SDK 使用示例
 ├── Makefile                    # 跨语言构建命令
@@ -326,6 +274,8 @@ make prepare       # 安装所有依赖 + CLI 工具
 make test          # 运行全部测试（TS + Python）
 make check         # Lint + 类型检查
 make format        # 格式化 Python 代码
+make render-diagrams # 将 docs/diagrams/*.puml 编译为 SVG
+make check-diagrams  # 校验 SVG 是否与源码同步
 make release-check # 校验发布版本一致性（可选：RELEASE_TAG=vX.Y.Z）
 make build         # 构建 Python 与 npm 发布产物到 dist/
 make help          # 查看所有可用目标

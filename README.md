@@ -237,69 +237,15 @@ uv run python examples/py-agent/main.py "1+9"
 
 ### Component Overview
 
-```plantuml
-@startuml
-skinparam componentStyle rectangle
+![AgentMesh Component Overview](docs/diagrams/component-overview.en.svg)
 
-package "LAN" {
-  [OpenClaw Gateway] as OC
-  [agentmesh-a2a Plugin] as Plugin
-  [agentmesh CLI / SDK] as Client
-
-  OC --> Plugin : loads
-  Plugin --> OC : dispatchReplyFromConfig()
-}
-
-cloud "mDNS (_a2a._tcp)" as MDNS
-
-Plugin ..> MDNS : announce
-Client ..> MDNS : discover
-
-node "A2A Protocol (HTTP)" {
-  [GET /.well-known/agent-card.json] as CardEP
-  [POST /a2a] as A2aEP
-}
-
-Plugin --> CardEP : serves
-Plugin --> A2aEP : serves
-Client --> CardEP : fetch AgentCard
-Client --> A2aEP : message/send | message/stream
-
-note right of MDNS
-  LAN only
-  WAN registry planned
-end note
-@enduml
-```
+Source: `docs/diagrams/component-overview.en.puml`
 
 ### Discovery + Invoke Flow
 
-```plantuml
-@startuml
-participant "agentmesh CLI\n(or SDK)" as Client
-participant "mDNS\n(_a2a._tcp)" as MDNS
-participant "agentmesh-a2a\nPlugin" as Plugin
-participant "OpenClaw\nGateway" as OC
+![AgentMesh Discovery and Invoke Flow](docs/diagrams/discovery-invoke-flow.en.svg)
 
-== Discovery ==
-
-Plugin -> MDNS : announce(_a2a._tcp)\nTXT: url, name, v=1
-Client -> MDNS : browse(_a2a._tcp)
-MDNS --> Client : found: OpenClaw\n@ 127.0.0.1:18789
-
-Client -> Plugin : GET /.well-known/agent-card.json
-Plugin --> Client : AgentCard\n{name, url, skills, capabilities}
-
-== A2A Message ==
-
-Client -> Plugin : POST /a2a\nAuthorization: Bearer <token>\n{"method":"message/send",\n "params":{"message":{...}}}
-Plugin -> Plugin : validate token
-Plugin -> Plugin : resolve agent + session key
-Plugin -> OC : dispatchReplyFromConfig()\ncreate session, run agent
-OC --> Plugin : agent reply (text)
-Plugin --> Client : {"result":{"id":"t1",\n "status":{"state":"completed"},\n "artifacts":[{"parts":[{"kind":"text","text":"..."}]}]}}
-@enduml
-```
+Source: `docs/diagrams/discovery-invoke-flow.en.puml`
 
 ### Repository Structure
 
@@ -310,6 +256,8 @@ agentmesh/
 │   ├── agentmeshd/             # Control plane daemon: events, storage, HTTP API
 │   ├── discovery-py/           # Python SDK: mDNS + static discovery
 │   └── openclaw-plugin/        # OpenClaw extension: AgentCard + A2A bridge + mDNS
+├── docs/diagrams/              # PlantUML sources + generated SVGs used by README
+├── scripts/                    # Release/CI helper scripts
 ├── tests/e2e/                  # E2E smoke tests
 ├── examples/py-agent/          # SDK usage example
 ├── Makefile                    # Cross-language build commands
@@ -326,6 +274,8 @@ make prepare       # Install all dependencies + CLI tools
 make test          # Run all tests (TS + Python)
 make check         # Lint + typecheck all
 make format        # Format Python code
+make render-diagrams # Compile docs/diagrams/*.puml to SVG
+make check-diagrams  # Verify generated SVGs are up-to-date
 make release-check # Validate release version alignment (optionally with RELEASE_TAG=vX.Y.Z)
 make build         # Build Python and npm release artifacts under dist/
 make help          # Show all available targets

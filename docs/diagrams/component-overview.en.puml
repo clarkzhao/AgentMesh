@@ -1,0 +1,32 @@
+@startuml
+skinparam componentStyle rectangle
+
+package "LAN" {
+  [OpenClaw Gateway] as OC
+  [agentmesh-a2a Plugin] as Plugin
+  [agentmesh CLI / SDK] as Client
+
+  OC --> Plugin : loads
+  Plugin --> OC : dispatchReplyFromConfig()
+}
+
+cloud "mDNS (_a2a._tcp)" as MDNS
+
+Plugin ..> MDNS : announce
+Client ..> MDNS : discover
+
+node "A2A Protocol (HTTP)" {
+  [GET /.well-known/agent-card.json] as CardEP
+  [POST /a2a] as A2aEP
+}
+
+Plugin --> CardEP : serves
+Plugin --> A2aEP : serves
+Client --> CardEP : fetch AgentCard
+Client --> A2aEP : message/send | message/stream
+
+note right of MDNS
+  LAN only
+  WAN registry planned
+end note
+@enduml
