@@ -30,22 +30,6 @@ jobs:
 
       - uses: astral-sh/setup-uv@v5
 
-      - uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: "21"
-
-      - name: Install Graphviz
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y graphviz
-
-      - name: Render architecture diagrams
-        run: make render-diagrams
-
-      - name: Verify generated diagrams are committed
-        run: make check-diagrams
-
       - name: Install dependencies
         run: make prepare
 

@@ -281,6 +281,8 @@ make build         # 构建 Python 与 npm 发布产物到 dist/
 make help          # 查看所有可用目标
 ```
 
+说明：图表 SVG 生成是本地维护步骤。修改 `docs/diagrams/*.puml` 后，请执行 `make render-diagrams` 并提交更新后的 `.svg` 文件。
+
 按包执行：
 
 ```bash

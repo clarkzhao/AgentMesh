@@ -281,6 +281,8 @@ make build         # Build Python and npm release artifacts under dist/
 make help          # Show all available targets
 ```
 
+Note: diagram SVG generation is a local maintenance step. After editing `docs/diagrams/*.puml`, run `make render-diagrams` and commit the updated `.svg` files.
+
 Per-package targets:
 
 ```bash
