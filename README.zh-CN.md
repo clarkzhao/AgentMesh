@@ -28,12 +28,14 @@ agentmesh/
 ├── packages/
 │   ├── discovery-py/           # Python SDK：mDNS + 静态发现
 │   ├── openclaw-plugin/        # OpenClaw 插件：AgentCard + A2A 桥接 + mDNS
+│   ├── agentmeshd/             # Python：控制面 daemon、EventV1、JSONL+SQLite
 │   ├── discovery-ts/           # TS SDK（规划中）
 │   ├── registry/               # 注册中心（规划中）
 │   └── identity/               # Ed25519 身份（规划中）
 ├── examples/
 │   ├── py-agent/               # 发现 -> 调用 A2A -> 输出结果
 │   └── demo.sh
+├── .github/workflows/ci.yml    # GitHub Actions CI
 ├── Makefile
 ├── package.json
 ├── pyproject.toml
@@ -166,6 +168,16 @@ Python 发现 SDK，包含：
 - `DiscoveryManager`：多来源合并去重
 - `MdnsAnnouncer`：广播本地 Agent
 
+### `packages/agentmeshd`
+
+AgentMesh 控制面 daemon，提供事件基础设施与 HTTP API：
+
+- **EventV1 schema** — 统一事件模型，6 种类型：`status`、`message`、`artifact`、`tool`、`reasoning`、`error`
+- **双写存储** — append-only JSONL + SQLite 索引
+- **HTTP API** — `GET /healthz`、`GET /api/events`（查询）、`POST /api/events`（写入）
+- **Daemon 管理** — `agentmeshd start`、`agentmeshd stop`、`agentmeshd status`
+- **旧格式兼容** — 自动将旧 `EventRecord` 格式提升为 EventV1（`event_type` → `kind`，`message` → `payload`）
+
 ### `packages/openclaw-plugin`
 
 OpenClaw A2A 桥接插件，支持：
@@ -190,10 +202,12 @@ make help
 按包执行：
 
 ```bash
-make test-openclaw-plugin
-make test-discovery-py
-make check-openclaw-plugin
-make check-discovery-py
+make test-openclaw-plugin    # TS 插件测试（102 tests）
+make test-discovery-py       # Python SDK 测试（16 tests）
+make test-agentmeshd         # agentmeshd 测试（28 tests）
+make check-openclaw-plugin   # TS 类型检查
+make check-discovery-py      # Python SDK lint + 类型检查
+make check-agentmeshd        # agentmeshd lint + 类型检查
 ```
 
 ## 已知限制（M2）
@@ -203,9 +217,14 @@ make check-discovery-py
 - OpenClaw UI 对 `a2a` provider 的会话详情展示仍有限制
 - 流式粒度依赖 OpenClaw：若仅返回 `final`，则会退化为单次 SSE 事件
 
-## 路线图（M3）
+## 路线图
 
-- WAN 注册中心（跨网络发现）
-- Ed25519 身份与双向认证
-- TypeScript 发现 SDK（`discovery-ts`）
-- 更多框架桥接插件（如 NanoClaw）
+详见 [M0-M4 详细执行计划](docs/m1-m4_execution_plan.md)。
+
+| 里程碑 | 方向 |
+|---|---|
+| M0 | 底座 — `agentmeshd` daemon、EventV1、JSONL+SQLite |
+| M1 | CLI — `agentmesh` 统一命令入口 |
+| M2 | Web GUI — 拓扑、时间线、筛选 |
+| M3 | Agent Teams — FSM 编排器 + 模板 |
+| M4 | 半 WAN — Tailscale 接入 + 安全底座 |

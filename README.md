@@ -96,12 +96,14 @@ agentmesh/
 ├── packages/
 │   ├── discovery-py/           # Python SDK — mDNS + static discovery
 │   ├── openclaw-plugin/        # OpenClaw extension: AgentCard + A2A bridge + mDNS
+│   ├── agentmeshd/             # Python — control plane daemon, EventV1, JSONL+SQLite
 │   ├── discovery-ts/           # TS SDK (planned)
 │   ├── registry/               # Registry server (planned)
 │   └── identity/               # Ed25519 identity (planned)
 ├── examples/
 │   ├── py-agent/               # Discover → A2A task → print result
 │   └── demo.sh
+├── .github/workflows/ci.yml    # GitHub Actions CI
 ├── Makefile                    # Cross-language build commands
 ├── package.json                # Monorepo root (pnpm for TS)
 ├── pnpm-workspace.yaml
@@ -270,6 +272,27 @@ asyncio.run(main())
 - `DiscoveryManager` — merges and deduplicates across sources
 - `MdnsAnnouncer` — publish your own agent via mDNS
 
+### `agentmeshd` — Control Plane Daemon
+
+Local daemon providing the event infrastructure and HTTP API for the AgentMesh control plane:
+
+- **EventV1 schema** — unified event model with 6 kinds: `status`, `message`, `artifact`, `tool`, `reasoning`, `error`
+- **Dual-write storage** — append-only JSONL + SQLite index for fast queries
+- **HTTP API** — `GET /healthz`, `GET /api/events` (query), `POST /api/events` (write)
+- **Daemon management** — `agentmeshd start`, `agentmeshd stop`, `agentmeshd status`
+- **Legacy compatibility** — reads old `EventRecord` format (auto-promotes `event_type` → `kind`, `message` → `payload`)
+
+```bash
+# Start the daemon
+agentmeshd start --port 8321
+
+# Check status
+agentmeshd status
+
+# Query events
+curl http://localhost:8321/api/events?run_id=r1
+```
+
 ### `openclaw-plugin` — OpenClaw A2A Bridge
 
 Exposes any OpenClaw agent as a standard A2A agent:
@@ -309,10 +332,12 @@ make help          # Show all available targets
 Per-package targets are also available:
 
 ```bash
-make test-openclaw-plugin    # TS plugin tests (100 tests)
-make test-discovery-py       # Python SDK tests (15 tests)
+make test-openclaw-plugin    # TS plugin tests (102 tests)
+make test-discovery-py       # Python SDK tests (16 tests)
+make test-agentmeshd         # agentmeshd tests (28 tests)
 make check-openclaw-plugin   # Typecheck TS plugin
 make check-discovery-py      # Lint + typecheck Python SDK
+make check-agentmeshd        # Lint + typecheck agentmeshd
 ```
 
 ## Known Limitations (M2)
@@ -324,12 +349,15 @@ make check-discovery-py      # Lint + typecheck Python SDK
 
 ## Roadmap
 
-### M3 — WAN Discovery + More Frameworks
+See [M0-M4 Execution Plan](docs/m1-m4_execution_plan.md) for full details.
 
-- Registry server for WAN/internet discovery (beyond LAN mDNS)
-- Ed25519 agent identity and mutual authentication
-- TypeScript discovery SDK (`discovery-ts`)
-- A2A bridge plugins for other frameworks (NanoClaw, etc.)
+| Milestone | Focus |
+|---|---|
+| M0 | Foundation — `agentmeshd` daemon, EventV1, JSONL+SQLite |
+| M1 | CLI — `agentmesh` unified command entry |
+| M2 | Web GUI — Topology, Timeline, Filter |
+| M3 | Agent Teams — FSM orchestrator + templates |
+| M4 | Semi-WAN — Tailscale access + security base |
 
 ## Demo Flow
 

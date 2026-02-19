@@ -20,6 +20,7 @@ body:
       options:
         - openclaw-plugin
         - discovery-py
+        - agentmeshd
         - examples
         - other
     validations:

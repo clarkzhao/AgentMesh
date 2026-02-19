@@ -5,10 +5,12 @@ description = "Agent discovery mesh for A2A agents"
 requires-python = ">=3.12"
 dependencies = [
     "agentmesh-discovery",
+    "agentmeshd",
 ]
 
 [tool.uv.workspace]
-members = ["packages/discovery-py"]
+members = ["packages/discovery-py", "packages/agentmeshd"]
 
 [tool.uv.sources]
 agentmesh-discovery = { workspace = true }
+agentmeshd = { workspace = true }

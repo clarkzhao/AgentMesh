@@ -11,9 +11,11 @@ prepare: ## Install all dependencies (pnpm + uv).
 	pnpm install
 	@echo "==> Installing Python dependencies"
 	uv sync
+	@echo "==> Installing agentmeshd CLI"
+	uv tool install --from ./packages/agentmeshd agentmeshd --force
 
 .PHONY: test
-test: test-openclaw-plugin test-discovery-py ## Run all tests.
+test: test-openclaw-plugin test-discovery-py test-agentmeshd ## Run all tests.
 
 .PHONY: test-openclaw-plugin
 test-openclaw-plugin: ## Run TS plugin tests.
@@ -26,7 +28,7 @@ test-discovery-py: ## Run Python SDK tests.
 	uv run --project packages/discovery-py pytest packages/discovery-py/tests
 
 .PHONY: check
-check: check-openclaw-plugin check-discovery-py ## Lint + typecheck all.
+check: check-openclaw-plugin check-discovery-py check-agentmeshd ## Lint + typecheck all.
 
 .PHONY: check-openclaw-plugin
 check-openclaw-plugin: ## Typecheck TS plugin.
@@ -41,12 +43,29 @@ check-discovery-py: ## Lint + typecheck Python SDK.
 	uv run --project packages/discovery-py pyright packages/discovery-py/agentmesh_discovery
 
 .PHONY: format
-format: format-discovery-py ## Format Python (TS has no formatter configured).
+format: format-discovery-py format-agentmeshd ## Format Python (TS has no formatter configured).
 
 .PHONY: format-discovery-py
 format-discovery-py: ## Format Python SDK with ruff.
 	@echo "==> Formatting discovery-py"
 	uv run --project packages/discovery-py ruff format packages/discovery-py
+
+.PHONY: test-agentmeshd
+test-agentmeshd: ## Run agentmeshd tests.
+	@echo "==> Testing agentmeshd"
+	uv run --project packages/agentmeshd pytest packages/agentmeshd/tests
+
+.PHONY: check-agentmeshd
+check-agentmeshd: ## Lint + typecheck agentmeshd.
+	@echo "==> Linting agentmeshd"
+	uv run --project packages/agentmeshd ruff check packages/agentmeshd
+	@echo "==> Typechecking agentmeshd"
+	uv run --project packages/agentmeshd pyright packages/agentmeshd/agentmeshd
+
+.PHONY: format-agentmeshd
+format-agentmeshd: ## Format agentmeshd with ruff.
+	@echo "==> Formatting agentmeshd"
+	uv run --project packages/agentmeshd ruff format packages/agentmeshd
 
 .PHONY: install-plugin
 install-plugin: ## Install plugin into OpenClaw (requires openclaw CLI).

@@ -9,6 +9,7 @@ Monorepo for A2A agent discovery and OpenClaw bridging. Two languages: TypeScrip
 ```text
 packages/openclaw-plugin/    # TS: OpenClaw A2A bridge plugin (ESM, vitest)
 packages/discovery-py/       # Python: mDNS + static discovery SDK (pytest)
+packages/agentmeshd/         # Python: control plane daemon — events, store, HTTP API (pytest)
 examples/py-agent/           # Demo script using a2a-sdk client
 docs/                        # Design and adoption notes
 ```
@@ -29,15 +30,17 @@ Per-package targets:
 ```bash
 make test-openclaw-plugin    # TS plugin tests (vitest)
 make test-discovery-py       # Python SDK tests (pytest)
+make test-agentmeshd         # agentmeshd tests (pytest)
 make check-openclaw-plugin   # Typecheck TS plugin
 make check-discovery-py      # Lint + typecheck Python SDK
+make check-agentmeshd        # Lint + typecheck agentmeshd
 ```
 
 ## Conventions
 
 - **Commits**: Conventional Commits, `<type>(<scope>): <description>`.
   Types: `feat`, `fix`, `docs`, `style`, `refactor`, `perf`, `test`, `chore`, `ci`.
-  Scopes: `discovery-py`, `openclaw-plugin`, `examples`, `docs`, `root`.
+  Scopes: `discovery-py`, `openclaw-plugin`, `agentmeshd`, `examples`, `docs`, `root`.
   Omit scope for cross-package changes. See `CONTRIBUTING.md`.
 - **TS style**: ESM (`"type": "module"`), `.js` extensions in imports, no build step (OpenClaw uses jiti).
 - **Python style**: Python 3.12+, ruff lint/format, pyright strict, pytest-asyncio strict mode.
@@ -62,6 +65,10 @@ make check-discovery-py      # Lint + typecheck Python SDK
 - **Multi-agent routing**: resolve `agentId` from `message.metadata.skill_id`; fallback to `session.agentId`.
 - **Discovery**: mDNS uses `bonjour-service` (TS) and `zeroconf` (Python) with `_a2a._tcp`.
 - **Spec alignment**: A2A v0.3 style fields (`kind`, `context_id`, `message_id`) and task/message endpoints.
+- **EventV1 schema**: Canonical event record with `schema_version`, `kind` (status/message/artifact/tool/reasoning/error), `payload` (structured dict), and three-level correlation IDs (`task_id`, `run_id`, `team_run_id`).
+- **Dual-write storage**: `EventStore` appends to both JSONL (durability) and SQLite (queryability) atomically. SQLite indexes on `run_id`, `task_id`, `kind`.
+- **Legacy EventRecord compat**: `EventV1.from_dict()` auto-detects old format (`event_type` present, `kind` absent) and promotes fields in-place. No migration scripts needed.
+- **agentmeshd daemon**: Python (Starlette + uvicorn), PID file in `~/.agentmesh/agentmeshd.pid`, HTTP API on port 8321 by default.
 
 ## Installing the Plugin in OpenClaw
 
@@ -75,4 +82,5 @@ make sync-plugin       # After code changes (rsync --delete removes stale files)
 Run the relevant suite after edits:
 - Changed `packages/openclaw-plugin/src/*.ts` -> `make test-openclaw-plugin`
 - Changed `packages/discovery-py/**/*.py` -> `make test-discovery-py`
-- Changed both -> `make test`
+- Changed `packages/agentmeshd/**/*.py` -> `make test-agentmeshd`
+- Changed multiple packages -> `make test`
