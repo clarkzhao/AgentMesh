@@ -17,7 +17,7 @@ prepare: ## Install all dependencies (pnpm + uv).
 	uv tool install --from ./packages/agentmesh-cli agentmesh-cli --force --reinstall
 
 .PHONY: test
-test: test-openclaw-plugin test-discovery-py test-agentmeshd test-agentmesh-cli ## Run all tests.
+test: test-openclaw-plugin test-discovery-py test-agentmeshd test-agentmesh-cli test-e2e ## Run all tests.
 
 .PHONY: test-openclaw-plugin
 test-openclaw-plugin: ## Run TS plugin tests.
