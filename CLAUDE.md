@@ -11,7 +11,7 @@ packages/openclaw-plugin/    # TS: OpenClaw A2A bridge plugin (ESM, vitest)
 packages/discovery-py/       # Python: mDNS + static discovery SDK (pytest)
 packages/agentmeshd/         # Python: control plane daemon — events, store, HTTP API (pytest)
 packages/agentmesh-cli/      # Python: CLI — discover, invoke, trace A2A agents (pytest)
-examples/py-agent/           # Demo script using a2a-sdk client
+examples/py-agent/           # SDK usage example: discover + invoke via a2a-sdk
 docs/                        # Design and adoption notes
 tests/e2e/                   # E2E smoke tests (mock agent + in-process daemon)
 ```
@@ -50,7 +50,7 @@ make format-agentmesh-cli    # Format CLI with ruff
   Omit scope for cross-package changes. See `CONTRIBUTING.md`.
 - **TS style**: ESM (`"type": "module"`), `.js` extensions in imports, no build step (OpenClaw uses jiti).
 - **Python style**: Python 3.12+, ruff lint/format, pyright strict, pytest-asyncio strict mode.
-- **Docs sync**: `CLAUDE.md` and `AGENT.md` must stay in sync.
+- **Docs sync**: `CLAUDE.md` and `AGENT.md` must always have identical content. When you edit one, immediately copy the same change to the other.
 - **License**: Apache 2.0.
 
 ## Key Architecture Decisions

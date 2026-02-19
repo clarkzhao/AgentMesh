@@ -76,8 +76,8 @@ openclaw gateway
 ### 发现、调用、追踪
 
 ```bash
-# 1. 启动 daemon（用于记录事件，trace 依赖）
-agentmeshd start
+# 1. 后台启动 daemon（用于记录事件，trace 依赖）
+agentmeshd start -b
 
 # 2. 发现局域网 Agent
 agentmesh discover

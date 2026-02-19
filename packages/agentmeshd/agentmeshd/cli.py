@@ -19,13 +19,18 @@ DataDirOption = Annotated[
 def start(
     host: Annotated[str, typer.Option(help="Bind address.")] = DEFAULT_HOST,
     port: Annotated[int, typer.Option(help="Bind port.")] = DEFAULT_PORT,
+    background: Annotated[
+        bool,
+        typer.Option("--background", "-b", help="Run in background."),
+    ] = False,
     data_dir: DataDirOption = None,
 ) -> None:
     """Start the agentmeshd daemon."""
     from agentmeshd.daemon import start as _start
 
-    typer.echo(f"Starting agentmeshd on {host}:{port}")
-    _start(host=host, port=port, data_dir=data_dir)
+    if not background:
+        typer.echo(f"Starting agentmeshd on {host}:{port}")
+    _start(host=host, port=port, data_dir=data_dir, background=background)
 
 
 @app.command()

@@ -76,8 +76,8 @@ openclaw gateway
 ### Discover, Run, Trace
 
 ```bash
-# 1. Start the daemon (records events for trace)
-agentmeshd start
+# 1. Start the daemon in background (records events for trace)
+agentmeshd start -b
 
 # 2. Discover agents on the local network
 agentmesh discover
