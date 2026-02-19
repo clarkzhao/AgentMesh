@@ -141,4 +141,4 @@ build-openclaw-plugin: ## Pack the OpenClaw plugin for npm release.
 	@echo "==> Packing @agentmesh/agentmesh-a2a"
 	@PLUGIN_VERSION=$$(node -p "require('./packages/openclaw-plugin/package.json').version"); \
 	mkdir -p "$(NPM_DIST_DIR)/$$PLUGIN_VERSION"; \
-	pnpm --filter @agentmesh/agentmesh-a2a pack --pack-destination "$(NPM_DIST_DIR)/$$PLUGIN_VERSION"
+	cd packages/openclaw-plugin && npm pack --pack-destination "../../$(NPM_DIST_DIR)/$$PLUGIN_VERSION"
